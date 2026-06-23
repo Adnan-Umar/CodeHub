@@ -2,6 +2,8 @@
 
 const CODE360_PLATFORM_FOLDER = 'Code360';
 
+const DETECTED_PLATFORM = 'Code360';
+
 function getCode360ProblemSlug() {
   const path = window.location.pathname;
   const match = path.match(/\/problems\/([^/?#]+)/);
@@ -69,8 +71,29 @@ function code360ShowSpinner() {
   code360SpinnerElem.className = 'leethub-code360-spinner';
   code360SpinnerElem.id = 'leethub-code360-indicator';
 
-  const target = document.querySelector('button[type="submit"], [data-testid*="submit"], button');
-  if (target && target.parentElement) {
+  let target = document.querySelector(
+    'button[type="submit"], [data-testid*="submit"], .submit-btn, [class*="submit-button"]',
+  );
+  // Fallback: find button containing "submit" or "run" text
+  if (!target) {
+    const buttons = document.querySelectorAll('button, [role="button"]');
+    for (const btn of buttons) {
+      const text =
+        btn.innerText?.trim().toLowerCase() || btn.textContent?.trim().toLowerCase() || '';
+      if (text.includes('submit') || text.includes('run code')) {
+        target = btn;
+        break;
+      }
+    }
+  }
+  // Fallback: fixed overlay
+  if (!target) {
+    code360SpinnerElem.style.position = 'fixed';
+    code360SpinnerElem.style.top = '16px';
+    code360SpinnerElem.style.right = '16px';
+    code360SpinnerElem.style.zIndex = '99999';
+    document.body.appendChild(code360SpinnerElem);
+  } else if (target.parentElement) {
     target.parentElement.appendChild(code360SpinnerElem);
   }
 }
@@ -92,14 +115,23 @@ function code360MarkFailed() {
 }
 
 async function handleCode360Submission(detail) {
-  console.log('[CodeHub Code360] Submission event received:', detail);
+  console.log(`[CodeHub Code360] Submission event received:`, detail);
+
+  const problemSlug = detail?.problemSlug || getCode360ProblemSlug();
+  const platform = detail?.platform || DETECTED_PLATFORM;
 
   const status =
     `${detail?.status || detail?.verdict || detail?.response?.status || ''}`.toLowerCase();
   const isAccepted = status === 'ac' || status.includes('accepted');
 
   if (!isAccepted) {
-    console.log('[CodeHub Code360] Submission not accepted, skipping upload. Status:', status);
+    console.log(`[CodeHub Code360] Submission not accepted, skipping upload. Status:`, status);
+    code360MarkFailed();
+    return;
+  }
+
+  if (!problemSlug) {
+    console.error(`[CodeHub Code360] Could not determine problem slug.`);
     code360MarkFailed();
     return;
   }
@@ -107,9 +139,6 @@ async function handleCode360Submission(detail) {
   code360ShowSpinner();
 
   try {
-    const problemSlug = getCode360ProblemSlug();
-    if (!problemSlug) throw new Error('Could not determine Code360 problem slug.');
-
     const code = detail?.code || getCode360Code();
     if (!code) throw new Error('Could not extract solution code.');
 
@@ -117,7 +146,7 @@ async function handleCode360Submission(detail) {
     const difficulty = detail?.difficulty || getCode360Difficulty() || '';
     const problemUrl = window.location.href.split('?')[0];
     const readmeContent = `## [${problemSlug}](${problemUrl})\n\n*Platform: Code360*\n`;
-    const commitMsg = `Add ${problemSlug} solution (Code360) - LeetHub`;
+    const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
     await leethubPushSolution({
       platformFolder: CODE360_PLATFORM_FOLDER,
@@ -133,14 +162,12 @@ async function handleCode360Submission(detail) {
     console.log(`[CodeHub Code360] Successfully pushed ${problemSlug}`);
   } catch (err) {
     code360MarkFailed();
-    console.error('[CodeHub Code360] Upload failed:', err);
+    console.error(`[CodeHub Code360] Upload failed:`, err);
   }
 }
 
-['codingNinjasSubmission'].forEach(eventName => {
-  window.addEventListener(eventName, event => {
-    handleCode360Submission(event.detail);
-  });
+window.listenCodeHubEvents({
+  codingNinjasSubmission: detail => handleCode360Submission(detail),
 });
 
 const code360Observer = new MutationObserver(() => {
@@ -148,8 +175,8 @@ const code360Observer = new MutationObserver(() => {
     '[class*="accepted"], [class*="AC"], .verdict, .result, .text-green',
   );
 
-  if (accepted && !accepted.dataset.leethubProcessed) {
-    accepted.dataset.leethubProcessed = 'true';
+  if (accepted && !accepted.dataset.codehubProcessed) {
+    accepted.dataset.codehubProcessed = 'true';
     handleCode360Submission({ status: accepted.innerText?.trim() || 'AC' });
   }
 });

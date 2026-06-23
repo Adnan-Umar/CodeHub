@@ -1,10 +1,68 @@
 /**
- * Shared GitHub upload utilities for LeetHub multi-platform support.
+ * Shared GitHub upload utilities for CodeHub multi-platform support.
  * Loaded before all platform-specific content scripts.
  *
  * Functions are exposed as globals (window.*) so they are accessible
  * from leetcode.js, hackerrank.js, geeksforgeeks.js, and codingninja.js.
  */
+
+const CODEHUB_MESSAGE_SOURCE = 'codehub-extension';
+
+/**
+ * Proxies GitHub API requests through the background service worker so
+ * uploads work reliably under Manifest V3 host permission rules.
+ */
+async function codehubGithubFetch(url, options = {}) {
+  const response = await chrome.runtime.sendMessage({
+    type: 'CODEHUB_GITHUB_REQUEST',
+    payload: {
+      url,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      body: options.body,
+    },
+  });
+
+  if (chrome.runtime.lastError) {
+    throw new Error(chrome.runtime.lastError.message);
+  }
+  if (!response) {
+    throw new Error('No response from CodeHub background worker');
+  }
+  if (response.error) {
+    throw new Error(response.error);
+  }
+  return response;
+}
+
+async function codehubGithubJson(url, options = {}) {
+  const response = await codehubGithubFetch(url, options);
+  if (!response.ok) {
+    const err = new Error(String(response.status));
+    err.responseText = response.text;
+    throw err;
+  }
+  return response.json;
+}
+
+/**
+ * Bridges events from the MAIN-world interceptor to isolated content scripts.
+ */
+function listenCodeHubEvents(eventHandlers) {
+  window.addEventListener('message', event => {
+    if (event.data?.source !== CODEHUB_MESSAGE_SOURCE) {
+      return;
+    }
+    const handler = eventHandlers[event.data.event];
+    if (handler) {
+      handler(event.data.detail ?? {});
+    }
+  });
+
+  Object.entries(eventHandlers).forEach(([eventName, handler]) => {
+    window.addEventListener(eventName, event => handler(event.detail ?? {}));
+  });
+}
 
 /* Map of language display names to file extensions (superset for all platforms) */
 const LEETHUB_LANGUAGES = {
@@ -50,6 +108,9 @@ const LEETHUB_LANGUAGES = {
  */
 function buildGitHubUrl(hook, platformFolder, difficulty, problem, filename, useDifficultyFolder) {
   const filePath = problem ? `${problem}/${filename}` : filename;
+  if (!problem) {
+    return `https://api.github.com/repos/${hook}/contents/${filePath}`;
+  }
   const path = useDifficultyFolder
     ? `${platformFolder}/${difficulty}/${filePath}`
     : `${platformFolder}/${filePath}`;
@@ -98,7 +159,7 @@ async function githubUpload(
     ...(sha ? { sha } : {}),
   });
 
-  const res = await fetch(url, {
+  const res = await codehubGithubFetch(url, {
     method: 'PUT',
     headers: {
       Authorization: `token ${token}`,
@@ -111,7 +172,7 @@ async function githubUpload(
     throw new Error(res.status.toString());
   }
 
-  const responseBody = await res.json();
+  const responseBody = res.json;
   const updatedSha = responseBody.content.sha;
 
   // Persist the new SHA in local storage so future uploads can update rather than re-create
@@ -122,12 +183,85 @@ async function githubUpload(
   safeStats.shas[key][filename] = updatedSha;
   await chrome.storage.local.set({ stats: safeStats });
 
-  console.log(`[LeetHub] Committed ${filename} → ${platformFolder}/${problem}`);
+  console.log(`[CodeHub] Committed ${filename} → ${platformFolder}/${problem}`);
   return responseBody;
+}
+
+/**
+ * Creates a directory placeholder on GitHub by uploading a .gitkeep file.
+ * GitHub doesn't have a dedicated directory creation API, so we upload
+ * a .gitkeep file to the desired path to initialize the directory.
+ *
+ * @param {string} token - GitHub personal access token
+ * @param {string} hook - "username/repo"
+ * @param {string} path - directory path relative to repo root, e.g. "HackerRank" or "LeetCode/Easy"
+ * @returns {Promise<void>}
+ */
+async function createGitDirectory(token, hook, path) {
+  const url = `https://api.github.com/repos/${hook}/contents/${path}/.gitkeep`;
+  const body = JSON.stringify({
+    message: `Create ${path} directory`,
+    content: btoa(unescape(encodeURIComponent(''))),
+  });
+
+  const res = await codehubGithubFetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+    body,
+  });
+
+  if (res.status === 201 || res.status === 200) {
+    console.log(`[CodeHub] Created directory: ${path}`);
+  } else if (res.status === 422) {
+    console.log(`[CodeHub] Directory already exists: ${path}`);
+  } else {
+    const text = res.text || '';
+    throw new Error(`Failed to create directory "${path}": ${res.status} ${text}`);
+  }
+}
+
+/**
+ * Ensures a directory exists on the remote repository.
+ * Uses the GitHub API to check whether the platform folder exists; if it does
+ * not, the directory is created by uploading a .gitkeep placeholder.
+ *
+ * @param {string} token - GitHub personal access token
+ * @param {string} hook - "username/repo"
+ * @param {string} platformFolder - platform folder name, e.g. "HackerRank"
+ * @param {string} difficulty - optional difficulty subfolder ("Easy" | "Medium" | "Hard")
+ * @returns {Promise<void>}
+ */
+async function ensureGitDirectory(token, hook, platformFolder, difficulty = '') {
+  const segments = [platformFolder];
+  if (difficulty) segments.push(difficulty);
+  const dirPath = segments.join('/');
+  const checkUrl = `https://api.github.com/repos/${hook}/contents/${dirPath}`;
+
+  const checkRes = await codehubGithubFetch(checkUrl, {
+    method: 'GET',
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
+
+  if (checkRes.status === 404) {
+    await createGitDirectory(token, hook, dirPath);
+  } else if (!checkRes.ok) {
+    const text = checkRes.text || '';
+    throw new Error(`Failed to check directory "${dirPath}": ${checkRes.status} ${text}`);
+  }
 }
 
 window.LEETHUB_LANGUAGES = LEETHUB_LANGUAGES;
 window.leethubPushSolution = leethubPushSolution;
+window.ensureGitDirectory = ensureGitDirectory;
+window.codehubGithubFetch = codehubGithubFetch;
+window.codehubGithubJson = codehubGithubJson;
+window.listenCodeHubEvents = listenCodeHubEvents;
 
 /**
  * Fetches the current SHA and content of a file on GitHub (needed for updates).
@@ -159,7 +293,7 @@ async function githubGetFile(
     useDifficultyFolder,
   );
 
-  const res = await fetch(url, {
+  const res = await codehubGithubFetch(url, {
     method: 'GET',
     headers: {
       Authorization: `token ${token}`,
@@ -169,7 +303,7 @@ async function githubGetFile(
 
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(res.status.toString());
-  return res.json();
+  return res.json;
 }
 
 /**
@@ -197,13 +331,13 @@ async function leethubPushSolution({
   filenameSuffix = null,
 }) {
   const { leethub_token } = await chrome.storage.local.get('leethub_token');
-  if (!leethub_token) throw new Error('[LeetHub] No GitHub token configured.');
+  if (!leethub_token) throw new Error('[CodeHub] No GitHub token configured.');
 
   const { mode_type } = await chrome.storage.local.get('mode_type');
-  if (mode_type !== 'commit') throw new Error('[LeetHub] Extension not in commit mode.');
+  if (mode_type !== 'commit') throw new Error('[CodeHub] Extension not in commit mode.');
 
   const { leethub_hook } = await chrome.storage.local.get('leethub_hook');
-  if (!leethub_hook) throw new Error('[LeetHub] No GitHub repo configured.');
+  if (!leethub_hook) throw new Error('[CodeHub] No GitHub repo configured.');
 
   const { useDifficultyFolder = false } = await chrome.storage.local.get('useDifficultyFolder');
 
@@ -218,6 +352,14 @@ async function leethubPushSolution({
   const existingSha = safeStats.shas?.[storageKey]?.[baseFilename] ?? null;
 
   const encodedCode = btoa(unescape(encodeURIComponent(code)));
+
+  // Ensure the platform (and optional difficulty) directory exists on GitHub
+  await ensureGitDirectory(
+    leethub_token,
+    leethub_hook,
+    platformFolder,
+    useDifficultyFolder ? difficulty : '',
+  );
 
   // Handle 409 conflict by fetching latest SHA and retrying
   async function uploadWithRetry(sha) {

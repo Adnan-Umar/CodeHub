@@ -1,30 +1,36 @@
 <div align="center">
-    <img src="assets/logo.png" alt="CodeHub-3.0">
+    <img src="assets/logo.png" alt="CodeHub">
 </div>
 
 <p align="center">
-  <a href="https://github.com/raphaelheinz/LeetHub-3.0/blob/main/LICENSE">
+  <a href="https://github.com/Adnan-Umar/CodeHub/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license"/>
   </a>
-  <a href="https://chromewebstore.google.com/u/1/detail/leethub-v3/kdkgpjpenaeoodajljkflmlnkoihkmda">
-    <img src="https://img.shields.io/chrome-web-store/v/kdkgpjpenaeoodajljkflmlnkoihkmda.svg" alt="chrome-webstore"/>
-  </a>
-  <a href="https://chromewebstore.google.com/u/1/detail/leethub-v3/kdkgpjpenaeoodajljkflmlnkoihkmda">
-    <img src="https://img.shields.io/chrome-web-store/d/kdkgpjpenaeoodajljkflmlnkoihkmda.svg" alt="users">
-  </a>
-  <a href="https://github.com/raphaelheinz/LeetHub-3.0/graphs/contributors" alt="Contributors">
-    <img src="https://img.shields.io/github/contributors/raphaelheinz/LeetHub-3.0" />
+  <a href="https://github.com/Adnan-Umar/CodeHub/graphs/contributors" alt="Contributors">
+    <img src="https://img.shields.io/github/contributors/Adnan-Umar/CodeHub" />
   </a>
 </p>
 
-## What is CodeHub-3.0?
+## What is CodeHub?
 
-A chrome extension that automatically pushes your code to GitHub when you pass all tests on a <a href="https://leetcode.com/">Leetcode</a> or <a href="https://leetcode.cn/">Leetcode CN</a> problem. It's forked from <a href="https://github.com/arunbhardwaj/LeetHub-2.0">LeetHub-2.0</a> which is not compatible with Leetcode anymore since the latest updates.
+CodeHub is a Chrome extension that automatically pushes your accepted coding solutions to GitHub. Each platform is organized into its own folder inside your repository:
+
+| Platform | GitHub folder |
+|----------|---------------|
+| LeetCode / LeetCode CN | `LeetCode/` |
+| HackerRank | `HackerRank/` |
+| GeeksForGeeks | `GeeksForGeeks/` |
+| Coding Ninjas / Code360 | `Code360/` |
+
+If a platform folder does not exist yet, CodeHub creates it before uploading your solution.
+
+CodeHub is forked from [LeetHub-3.0](https://github.com/raphaelheinz/LeetHub-3.0) and extended with multi-platform support.
 
 
 ## Why CodeHub?
 
-There's no easy way of accessing your leetcode problems in one place! Moreover, pushing code manually to GitHub from Leetcode is very time consuming. So, why not just automate it entirely without spending a SINGLE additional second on it?
+There's no easy way of accessing your solved problems from multiple coding platforms in one place. Pushing code manually to GitHub after every submission is time consuming. CodeHub automates that workflow so you can focus on solving problems.
+
 
 ## Screenshot
 
@@ -32,63 +38,58 @@ There's no easy way of accessing your leetcode problems in one place! Moreover, 
     <img src="assets/extension/4.png" alt="leetcode view" width="800">
 </h1>
 
+
 ## Supported Platforms
 
-CodeHub-3.0 supports both:
 - **LeetCode.com** (English)
-- **LeetCode.cn** (Chinese/力扣)
+- **LeetCode.cn** (Chinese / 力扣)
+- **HackerRank**
+- **GeeksForGeeks**
+- **Coding Ninjas / Code360**
 
-## Supported UI
 
-CodeHub-3.0 works with two different Leetcode UIs. There are known issues when using the plugin with the "non-dynamic layout". Please use one of the following:
+## Supported LeetCode UI
+
+CodeHub works with two different LeetCode UIs. There are known issues when using the plugin with the "non-dynamic layout". Please use one of the following:
 
 1. **old layout** or
 2. new **"dynamic layout"**
 
 
-## Manual synchronization
+## Manual synchronization (LeetCode)
 
-Your submission may not be successfully uploaded to GitHub if you update the text in the editor too fast. It is necessary to wait for 4 seconds (until the spinner stops) after submitting the solution before entering new characters, switching languages, or switching editors. During this period, your solution is being pushed to GitHub, and the website should maintain its layout without alteration. While this process is less than ideal, we have not found a better solution so far. Sorry for this inconvenience! If you find a fix, your PRs are welcome!
+Your submission may not be successfully uploaded to GitHub if you update the text in the editor too fast. Wait for the upload spinner to finish before editing, switching languages, or switching editors.
 
-In the meantime, we have added a manual synchronization button next to notes icon. Please use the manual sync button only after you have successfully submitted your solution to Leetcode. Additionally, you can push previous submissions to GitHub by selecting the submission first and then click on the manual synchronization button.
+A manual **Push** button is available next to the notes icon on LeetCode. Use it after a successful submission, or select a previous submission and push it to GitHub.
 
 
 ## Installation
 
-<div align="center">
-    <a href="https://chromewebstore.google.com/u/1/detail/leethub-v3/kdkgpjpenaeoodajljkflmlnkoihkmda" rel="Download leetcode plugin">
-        <img src="https://embedsignage.com/wp-content/uploads/2016/04/embed-signage-chromeos-web-store-button.png" alt="Download leetcode plugin" width="300" />
-    </a>
-</div>
+1. **Chrome Web Store** *(when published)*
 
-1. **Chrome Web Store**
-
-    Install this plugin using Chrome Web Store. Please find the link above. This is the preferred way of installation. Updates are installed automatically.
+    Install from the Chrome Web Store for automatic updates.
 
 
-2. **(Optional) Manual installation**
+2. **Manual installation**
 
-    You can also install the plugin manually. Please follow the steps below.
-
-    * Create your own OAuth app in GitHub (https://github.com/settings/applications/new) and store CLIENT_ID and CLIENT_SECRET confidentially
-        * Application name: [CUSTOM]
-        * Homepage URL: https://github.com/raphaelheinz/LeetHub-3.0
+    * Create your own OAuth app in GitHub (https://github.com/settings/applications/new) and store `CLIENT_ID` and `CLIENT_SECRET` confidentially
+        * Application name: CodeHub
+        * Homepage URL: https://github.com/Adnan-Umar/CodeHub
         * Authorization callback URL: https://github.com/
-    * Download the project ZIP (<a href="https://github.com/raphaelheinz/LeetHub-3.0/releases">Releases</a>) or clone this repository
-    * Run ```npm run setup``` to install the developer dependencies
-    * Update CLIENT_ID and CLIENT_SECRET in ```src/js/authorize.js``` and ```src/js/oauth2.js``` with your ids
-    * Go to <a href="chrome://extensions">chrome://extensions</a>
-    * Enable <a href="https://www.mstoic.com/enable-developer-mode-in-chrome/">Developer mode</a> by toggling the switch on top right corner
-    * Click **"Load unpacked"**
-    * Select the entire CodeHub folder
+    * Clone this repository or download a release ZIP
+    * Run `npm run setup` to install developer dependencies
+    * Update `CLIENT_ID` and `CLIENT_SECRET` in `src/js/authorize.js` and `src/js/oauth2.js`
+    * Open <a href="chrome://extensions">chrome://extensions</a>
+    * Enable **Developer mode**
+    * Click **Load unpacked** and select the CodeHub folder
 
 
 ## Setup
 
-1. After installing the CodeHub, launch the plugin
-2. Click on **"Authorize with GitHub"** to set up your account with CodeHub
-3. Setup an existing/new repository with CodeHub (private by default) by clicking **"Get Started"**
-4. Begin Leetcoding! To view your progress, simply click on the extension!
+1. After installing CodeHub, open the extension popup
+2. Click **Authenticate with GitHub**
+3. Create or link a repository via **Get Started**
+4. Start solving problems — accepted submissions are pushed automatically
 
 
 ## Supported npm commands
@@ -102,9 +103,7 @@ npm run lint          # Lint JavaScript
 npm run lint-test     # Test if code is linted properly
 ```
 
+
 ## Contribution
 
-Please help to further improve this awesome plugin! We would appreciate your support. Your pull requests are welcome!
-
-Don't forget to star this repository for further development of new features. If you want a particular feature, simply [request](https://github.com/raphaelheinz/LeetHub-3.0/labels/feature) for it!
-
+Pull requests are welcome! If you want a particular feature, [request it here](https://github.com/Adnan-Umar/CodeHub/labels/feature).

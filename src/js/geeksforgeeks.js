@@ -1,6 +1,8 @@
 /* global leethubPushSolution */
 const GFG_PLATFORM_FOLDER = 'GeeksForGeeks';
 
+const DETECTED_PLATFORM = 'GeeksForGeeks';
+
 function getGFGProblemSlug() {
   const path = window.location.pathname;
   const match = path.match(/\/problems\/([^/]+)/);
@@ -60,10 +62,28 @@ function gfgShowSpinner() {
   gfgSpinnerElem.className = 'leethub-gfg-spinner';
   gfgSpinnerElem.id = 'leethub-gfg-indicator';
 
-  const submitBtn = document.querySelector(
-    'button[class*="submit"], button[id*="submit"], .submit_btn button',
+  let submitBtn = document.querySelector(
+    'button[class*="submit"], button[id*="submit"], .submit_btn button, [data-testid*="submit"]',
   );
-  if (submitBtn && submitBtn.parentElement) {
+  // Fallback: find button with submit text
+  if (!submitBtn) {
+    const buttons = document.querySelectorAll('button, [role="button"]');
+    for (const btn of buttons) {
+      const text = btn.innerText?.trim().toLowerCase() || '';
+      if (text.includes('submit')) {
+        submitBtn = btn;
+        break;
+      }
+    }
+  }
+  // Fallback: fixed overlay
+  if (!submitBtn) {
+    gfgSpinnerElem.style.position = 'fixed';
+    gfgSpinnerElem.style.top = '16px';
+    gfgSpinnerElem.style.right = '16px';
+    gfgSpinnerElem.style.zIndex = '99999';
+    document.body.appendChild(gfgSpinnerElem);
+  } else if (submitBtn.parentElement) {
     submitBtn.parentElement.appendChild(gfgSpinnerElem);
   }
 }
@@ -85,7 +105,10 @@ function gfgMarkFailed() {
 }
 
 async function handleGFGSubmission(detail) {
-  console.log('[LeetHub GFG] Submission event received:', detail);
+  console.log(`[CodeHub GFG] Submission event received:`, detail);
+
+  const problemSlug = detail?.problemSlug || getGFGProblemSlug();
+  const platform = detail?.platform || DETECTED_PLATFORM;
 
   const statusStr = (
     detail?.status ||
@@ -97,7 +120,13 @@ async function handleGFGSubmission(detail) {
   const isAccepted = statusStr.includes('accepted') || statusStr === 'ac';
 
   if (!isAccepted) {
-    console.log('[LeetHub GFG] Not accepted, skipping upload. Status:', statusStr);
+    console.log(`[CodeHub GFG] Not accepted, skipping upload. Status:`, statusStr);
+    gfgMarkFailed();
+    return;
+  }
+
+  if (!problemSlug) {
+    console.error(`[CodeHub GFG] Could not extract problem slug from URL.`);
     gfgMarkFailed();
     return;
   }
@@ -105,9 +134,6 @@ async function handleGFGSubmission(detail) {
   gfgShowSpinner();
 
   try {
-    const problemSlug = getGFGProblemSlug();
-    if (!problemSlug) throw new Error('Could not extract GFG problem slug from URL.');
-
     const code = detail?.code || getGFGCode();
     if (!code) throw new Error('Could not extract solution code from editor.');
 
@@ -117,7 +143,7 @@ async function handleGFGSubmission(detail) {
     const problemUrl = window.location.href.split('?')[0];
     const title = document.title?.split('|')[0]?.trim() || problemSlug;
     const readmeContent = `## [${title}](${problemUrl})\n\n**Difficulty**: ${difficulty || 'N/A'}  \n*Platform: GeeksForGeeks*\n`;
-    const commitMsg = `Add ${problemSlug} solution (GeeksForGeeks) - LeetHub`;
+    const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
     await leethubPushSolution({
       platformFolder: GFG_PLATFORM_FOLDER,
@@ -130,25 +156,24 @@ async function handleGFGSubmission(detail) {
     });
 
     gfgMarkSuccess();
-    console.log(`[LeetHub GFG] Successfully pushed ${problemSlug}`);
+    console.log(`[CodeHub GFG] Successfully pushed ${problemSlug}`);
   } catch (err) {
     gfgMarkFailed();
-    console.error('[LeetHub GFG] Upload failed:', err);
+    console.error(`[CodeHub GFG] Upload failed:`, err);
   }
 }
 
-['gfgSubmission', 'leetHubGFGSubmission'].forEach(eventName => {
-  window.addEventListener(eventName, event => {
-    handleGFGSubmission(event.detail);
-  });
+window.listenCodeHubEvents({
+  gfgSubmission: detail => handleGFGSubmission(detail),
+  leetHubGFGSubmission: detail => handleGFGSubmission(detail),
 });
 
 const gfgResultObserver = new MutationObserver(() => {
   const resultElem = document.querySelector(
     '[class*="result-ac"], [class*="accepted"], .verdict.accepted, .text-green',
   );
-  if (resultElem && !resultElem.dataset.leethubProcessed) {
-    resultElem.dataset.leethubProcessed = 'true';
+  if (resultElem && !resultElem.dataset.codehubProcessed) {
+    resultElem.dataset.codehubProcessed = 'true';
     handleGFGSubmission({ status: 'Accepted' });
   }
 });
@@ -157,4 +182,4 @@ setTimeout(() => {
   gfgResultObserver.observe(document.body, { childList: true, subtree: true });
 }, 2000);
 
-console.log('[LeetHub] GeeksForGeeks content script loaded.');
+console.log('[CodeHub] GeeksForGeeks content script loaded.');

@@ -1,9 +1,9 @@
 {
-  "name": "codehub-3",
-  "version": "0.0.2",
+  "name": "codehub",
+  "version": "0.0.16",
   "type": "module",
   "private": true,
-  "description": "Automatically integrate your code with LeetCode and GitHub",
+  "description": "Automatically sync coding solutions from LeetCode, HackerRank, GeeksForGeeks, and more to GitHub",
   "scripts": {
     "setup": "npm i",
     "format": "prettier --write src/**/*.{js,jsx,ts,tsx,css,html}",

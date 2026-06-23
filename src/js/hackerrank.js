@@ -2,6 +2,8 @@
 
 const HACKERRANK_PLATFORM_FOLDER = 'HackerRank';
 
+const DETECTED_PLATFORM = 'HackerRank';
+
 /**
  * Extracts the problem slug from the current HackerRank URL.
  * URL patterns:
@@ -64,11 +66,30 @@ function hrShowSpinner() {
   hrSpinnerElem.className = 'leethub-hr-spinner';
   hrSpinnerElem.id = 'leethub-hr-indicator';
 
-  // Inject next to submit button
-  const submitBtn = document.querySelector(
-    '[data-action="submit"] button, button[data-analytics="CodeEditorSubmit"]',
+  // Inject next to submit button (try multiple selectors for HackerRank UI variants)
+  let submitBtn = document.querySelector(
+    '[data-action="submit"] button, button[data-analytics="CodeEditorSubmit"], [data-testid="submit-button"]',
   );
-  if (submitBtn && submitBtn.parentElement) {
+  // Fallback: find any button containing "Submit" text
+  if (!submitBtn) {
+    const buttons = document.querySelectorAll('button, [role="button"]');
+    for (const btn of buttons) {
+      const text =
+        btn.innerText?.trim().toLowerCase() || btn.textContent?.trim().toLowerCase() || '';
+      if (text.includes('submit')) {
+        submitBtn = btn;
+        break;
+      }
+    }
+  }
+  // Fallback: fixed position overlay in top-right corner
+  if (!submitBtn) {
+    hrSpinnerElem.style.position = 'fixed';
+    hrSpinnerElem.style.top = '16px';
+    hrSpinnerElem.style.right = '16px';
+    hrSpinnerElem.style.zIndex = '99999';
+    document.body.appendChild(hrSpinnerElem);
+  } else if (submitBtn.parentElement) {
     submitBtn.parentElement.appendChild(hrSpinnerElem);
   }
 }
@@ -93,17 +114,38 @@ function hrMarkFailed() {
  * Main upload handler — called when the interceptor fires a submission event.
  * @param {object} detail - { status, language, code }
  */
-async function handleHackerRankSubmission(detail) {
-  console.log('[LeetHub HackerRank] Submission event received:', detail);
+let lastHackerRankUploadKey = '';
 
-  // Only proceed for accepted submissions
-  const isAccepted =
-    detail?.status === 'Accepted' ||
-    detail?.result?.status === 'Accepted' ||
-    detail?.model?.status === 'Accepted';
+async function handleHackerRankSubmission(detail) {
+  console.log(`[CodeHub HackerRank] Submission event received:`, detail);
+
+  const problemSlug = detail?.problemSlug || getHackerRankProblemSlug();
+  const uploadKey = `${problemSlug}-${detail?.code?.length || 0}`;
+  if (uploadKey && uploadKey === lastHackerRankUploadKey) {
+    return;
+  }
+  const platform = detail?.platform || DETECTED_PLATFORM;
+  const statusStr = (
+    detail?.status ||
+    detail?.result?.status ||
+    detail?.model?.status ||
+    detail?.response?.status ||
+    ''
+  )
+    .toString()
+    .toLowerCase();
+  const isAccepted = statusStr.includes('accepted') || statusStr.includes('congratulations');
 
   if (!isAccepted) {
-    console.log('[LeetHub HackerRank] Submission not accepted, skipping upload.');
+    console.log(
+      `[CodeHub HackerRank] Submission not accepted, skipping upload. Status:`,
+      statusStr,
+    );
+    return;
+  }
+
+  if (!problemSlug) {
+    console.error(`[CodeHub HackerRank] Could not determine problem slug from URL.`);
     hrMarkFailed();
     return;
   }
@@ -111,21 +153,15 @@ async function handleHackerRankSubmission(detail) {
   hrShowSpinner();
 
   try {
-    const problemSlug = getHackerRankProblemSlug();
-    if (!problemSlug) throw new Error('Could not determine problem slug from URL.');
-
-    // Code from event detail (captured from request body) or from editor
     const code = detail?.code || getHackerRankCode();
     if (!code) throw new Error('Could not extract solution code.');
 
     const language = detail?.language || getHackerRankLanguage() || 'text';
     const difficulty = detail?.difficulty || '';
 
-    // Build a simple README with the problem link
     const problemUrl = window.location.href.split('?')[0];
     const readmeContent = `## [${problemSlug}](${problemUrl})\n\n*Platform: HackerRank*\n`;
-
-    const commitMsg = `Add ${problemSlug} solution (HackerRank) - LeetHub`;
+    const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
     await leethubPushSolution({
       platformFolder: HACKERRANK_PLATFORM_FOLDER,
@@ -137,19 +173,42 @@ async function handleHackerRankSubmission(detail) {
       readmeContent,
     });
 
+    lastHackerRankUploadKey = uploadKey;
     hrMarkSuccess();
-    console.log(`[LeetHub HackerRank] Successfully pushed ${problemSlug}`);
+    console.log(`[CodeHub HackerRank] Successfully pushed ${problemSlug}`);
   } catch (err) {
     hrMarkFailed();
-    console.error('[LeetHub HackerRank] Upload failed:', err);
+    console.error(`[CodeHub HackerRank] Upload failed:`, err);
   }
 }
 
-// Listen for the custom event dispatched by interceptor.js
-['hackerRankSubmission', 'leetHubHackerRankSubmission'].forEach(eventName => {
-  window.addEventListener(eventName, event => {
-    handleHackerRankSubmission(event.detail);
-  });
+// Listen for events from the MAIN-world interceptor via postMessage bridge
+window.listenCodeHubEvents({
+  hackerRankSubmission: detail => handleHackerRankSubmission(detail),
+  leetHubHackerRankSubmission: detail => handleHackerRankSubmission(detail),
 });
 
-console.log('[LeetHub] HackerRank content script loaded.');
+const hrResultObserver = new MutationObserver(() => {
+  const accepted = document.querySelector(
+    '.submission-message, [class*="accepted"], .status.accepted, .ui-output-status-accepted, .congrats-message',
+  );
+  if (accepted) {
+    const text = accepted.innerText?.toLowerCase() || '';
+    if (
+      (text.includes('accepted') || text.includes('congratulations')) &&
+      !accepted.dataset.codehubProcessed
+    ) {
+      accepted.dataset.codehubProcessed = 'true';
+      hrShowSpinner();
+      handleHackerRankSubmission({ status: 'Accepted' });
+    }
+  }
+});
+
+setTimeout(() => {
+  if (document.body) {
+    hrResultObserver.observe(document.body, { childList: true, subtree: true });
+  }
+}, 2000);
+
+console.log('[CodeHub] HackerRank content script loaded.');

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "CodeHub-3.0",
-  "description": "Automatically integrate your Leetcode submissions to GitHub",
+  "name": "CodeHub",
+  "description": "Automatically sync your coding solutions from LeetCode, HackerRank, GeeksForGeeks, and more to GitHub",
   "homepage_url": "https://github.com/Adnan-Umar/CodeHub",
   "version": "0.0.16",
   "author": "Raphael Heinz",
@@ -18,6 +18,7 @@
     "service_worker": "src/js/background.js"
   },
   "permissions": ["unlimitedStorage", "storage"],
+  "host_permissions": ["https://api.github.com/*"],
   "content_scripts": [
     {
       "matches": [

@@ -114,7 +114,12 @@ function constructGitHubPath(
       return `https://api.github.com/repos/${hook}/contents/${path}`;
     }
   }
-  const path = useDifficultyFolder ? `${basePath}/${difficulty}/${filePath}` : `${filePath}`;
+  if (!problem) {
+    return `https://api.github.com/repos/${hook}/contents/${filePath}`;
+  }
+  const path = useDifficultyFolder
+    ? `${basePath}/${difficulty}/${filePath}`
+    : `${basePath}/${filePath}`;
   return `https://api.github.com/repos/${hook}/contents/${path}`;
 }
 
@@ -275,15 +280,13 @@ const upload = (
   );
 
   /* Define Payload */
-  let data = {
+  const data = JSON.stringify({
     message: commitMsg,
     content: code,
-    sha,
-  };
+    ...(sha ? { sha } : {}),
+  });
 
-  data = JSON.stringify(data);
-
-  let options = {
+  const options = {
     method: 'PUT',
     headers: {
       Authorization: `token ${token}`,
@@ -293,13 +296,8 @@ const upload = (
   };
   let updatedSha;
 
-  return fetch(URL, options)
-    .then(res => {
-      if (res.status === 200 || res.status === 201) {
-        return res.json();
-      }
-      throw new Error(res.status);
-    })
+  return window
+    .codehubGithubJson(URL, options)
     .then(async body => {
       updatedSha = body.content.sha; // get updated SHA.
       const stats = await getAndInitializeStats(problem);
@@ -307,7 +305,7 @@ const upload = (
       return chrome.storage.local.set({ stats });
     })
     .then(() => {
-      console.log(`Successfully committed ${filename} to github`);
+      console.log(`[CodeHub] Successfully committed ${filename} to GitHub`);
       if (cb != undefined) {
         cb();
       }
@@ -336,11 +334,12 @@ const getAndInitializeStats = problem => {
 
 const incrementStats = () => {
   return chrome.storage.local.get('stats').then(({ stats }) => {
-    stats.solved += 1;
-    stats.easy += difficulty === 'Easy' ? 1 : 0;
-    stats.medium += difficulty === 'Medium' ? 1 : 0;
-    stats.hard += difficulty === 'Hard' ? 1 : 0;
-    return chrome.storage.local.set({ stats });
+    const safeStats = stats || { solved: 0, easy: 0, medium: 0, hard: 0, shas: {} };
+    safeStats.solved += 1;
+    safeStats.easy += difficulty === 'Easy' ? 1 : 0;
+    safeStats.medium += difficulty === 'Medium' ? 1 : 0;
+    safeStats.hard += difficulty === 'Hard' ? 1 : 0;
+    return chrome.storage.local.set({ stats: safeStats });
   });
 };
 
@@ -446,12 +445,18 @@ function uploadGit(
     })
     .then(result => {
       useLanguageFolder = result.useLanguageFolder || false;
+      if (!useLanguageFolder && typeof window.ensureGitDirectory === 'function') {
+        const dirDifficulty = useDifficultyFolder ? difficulty : '';
+        return window
+          .ensureGitDirectory(token, hook, basePath, dirDifficulty)
+          .then(() => chrome.storage.local.get('stats'));
+      }
       return chrome.storage.local.get('stats');
     })
     .then(({ stats }) => {
       if (action === 'upload') {
         /* Get SHA, if it exists */
-        const sha = stats?.shas?.[problemName]?.[fileName] ?? '';
+        const sha = stats?.shas?.[problemName]?.[fileName] || null;
 
         return upload(
           token,
@@ -539,19 +544,7 @@ async function getUpdatedData(
     },
   };
 
-  return fetch(URL, options)
-    .then(res => {
-      if (res.status === 200 || res.status === 201) {
-        return res.json();
-      } else {
-        console.log(`Fetch failed with status: ${res.status}`);
-        return {};
-      }
-    })
-    .catch(err => {
-      console.log(`Fetch error: ${err.message}`);
-      return {};
-    });
+  return window.codehubGithubJson(URL, options);
 }
 
 /* Checks if an elem/array exists and has length */
@@ -586,7 +579,7 @@ function addLeadingZeros(title) {
 }
 
 function formatStats(time, timePercentile, space, spacePercentile) {
-  return `Time: ${time} (${timePercentile}%), Space: ${space} (${spacePercentile}%) - LeetHub`;
+  return `Time: ${time} (${timePercentile}%), Space: ${space} (${spacePercentile}%) - CodeHub`;
 }
 
 function getGitIcon() {
@@ -725,8 +718,8 @@ LeetCodeV1.prototype.findAndUploadCode = function (
     submissionURL = submissionRef.href;
   }
 
-  if (submissionURL == undefined) {
-    return;
+  if (submissionURL == undefined || submissionURL == null) {
+    throw new Error('Could not find submission URL from the current page.');
   }
   /* Request for the submission details page */
   return fetch(submissionURL)
@@ -773,7 +766,7 @@ LeetCodeV1.prototype.findAndUploadCode = function (
               slicedText.indexOf("'") + 1,
               slicedText.lastIndexOf("'"),
             );
-            commitMsg = `Time: ${resultRuntime}, Memory: ${resultMemory} - LeetHub`;
+            commitMsg = `Time: ${resultRuntime}, Memory: ${resultMemory} - CodeHub`;
           }
           if (code != null) {
             return uploadGit(
@@ -788,6 +781,7 @@ LeetCodeV1.prototype.findAndUploadCode = function (
           }
         }
       }
+      throw new Error('Could not find submission code in the page data.');
     });
 };
 // Returns the language extension
@@ -875,21 +869,19 @@ LeetCodeV1.prototype.getSuccessStateAndUpdate = function () {
   const successTag = document.getElementsByClassName('success__3Ai7');
   const resultState = document.getElementById('result-state');
 
-  // check success state for a normal problem
   if (
     checkElem(successTag) &&
     successTag[0].className === 'success__3Ai7' &&
-    successTag[0].innerText.trim() === 'Success'
+    ['Success', 'Accepted', 'Done'].includes(successTag[0].innerText.trim())
   ) {
-    console.log(successTag[0]);
     successTag[0].classList.add('marked_as_success');
     return true;
   }
-  // check success state for a explore section problem
-  else if (
+
+  if (
     resultState &&
     resultState.className === 'text-success' &&
-    resultState.innerText === 'Accepted'
+    ['Accepted', 'Success', 'Done'].includes(resultState.innerText.trim())
   ) {
     resultState.classList.add('marked_as_success');
     return true;
@@ -908,7 +900,7 @@ LeetCodeV1.prototype.parseStats = function () {
   const space = probStats[2].textContent;
   const spacePercentile = probStats[3].textContent;
 
-  return `Time: ${time} (${timePercentile}), Space: ${space} (${spacePercentile}) - LeetHub`;
+  return `Time: ${time} (${timePercentile}), Space: ${space} (${spacePercentile}) - CodeHub`;
 };
 /* Parser function for the question, question title, question difficulty, and tags */
 LeetCodeV1.prototype.parseQuestion = function () {
@@ -982,7 +974,7 @@ LeetCodeV1.prototype.injectSpinnerStyle = function () {
 };
 /* Inserts an anchor element that is specific to the page you are on (e.g. Explore) */
 LeetCodeV1.prototype.insertToAnchorElement = function (elem) {
-  if (document.URL.startsWith('${getLeetCodeBaseUrl()}/explore/')) {
+  if (document.URL.startsWith(`${getLeetCodeBaseUrl()}/explore/`)) {
     const action = document.getElementsByClassName('action');
     if (
       checkElem(action) &&
@@ -1004,7 +996,7 @@ LeetCodeV1.prototype.insertToAnchorElement = function (elem) {
     }
   }
 };
-/* Creates a ✔️ tick mark before "Run Code" button signaling LeetHub has done its job */
+/* Creates a ✔️ tick mark before "Run Code" button signaling CodeHub has done its job */
 LeetCodeV1.prototype.markUploaded = function () {
   const elem = document.getElementById(this.progressSpinnerElementId);
   if (elem) {
@@ -1027,15 +1019,17 @@ LeetCodeV1.prototype.markUploadFailed = function () {
  * and listens for messages from the injected script.
  */
 LeetCodeV2.prototype.injectAndListen = function () {
-  window.addEventListener('leetHubSubmissionId', event => {
-    console.log('[LeetHub] Received submission ID:', event.detail.submissionId);
-    this.processSubmission(event.detail.submissionId);
-  });
-
-  window.addEventListener('leetHubSolutionPost', event => {
-    const { questionSlug, content, title } = event.detail;
-    console.log('LeetHub: Received solution post event:', event.detail);
-    this.handleSolutionPost(questionSlug, content, title);
+  const self = this;
+  window.listenCodeHubEvents({
+    leetHubSubmissionId: detail => {
+      console.log('[CodeHub] Received submission ID:', detail.submissionId);
+      self.processSubmission(detail.submissionId);
+    },
+    leetHubSolutionPost: detail => {
+      const { questionSlug, content, title } = detail;
+      console.log('CodeHub: Received solution post event:', detail);
+      self.handleSolutionPost(questionSlug, content, title);
+    },
   });
 };
 
@@ -1130,7 +1124,7 @@ query submissionDetails($submissionId: ID!) {
   )
     .then(res => res.json())
     .then(res => (isCN ? res.data.submissionDetail : res.data.submissionDetails));
-  console.info('LeetHub:', { submissionDetailsData });
+  console.info('CodeHub:', { submissionDetailsData });
   this.submissionData = submissionDetailsData;
 
   const questionDetailsQuery = {
@@ -1213,7 +1207,7 @@ query submissionDetails($submissionId: Int!) {
       }
     }
   } catch (err) {
-    console.error('LeetHub: Error checking submission status:', err);
+    console.error('CodeHub: Error checking submission status:', err);
   }
 
   return { complete: false, success: false };
@@ -1295,9 +1289,11 @@ LeetCodeV2.prototype.getProblemNameSlug = function () {
 LeetCodeV2.prototype.getSuccessStateAndUpdate = function () {
   const successTag = document.querySelectorAll('[data-e2e-locator="submission-result"]');
   if (checkElem(successTag)) {
-    console.log(successTag[0]);
-    successTag[0].classList.add('marked_as_success');
-    return true;
+    const text = successTag[0].innerText?.trim() || '';
+    if (text === 'Accepted' || text === 'Success') {
+      successTag[0].classList.add('marked_as_success');
+      return true;
+    }
   }
   return false;
 };
@@ -1405,7 +1401,7 @@ LeetCodeV2.prototype.injectSpinnerStyle = function () {
   document.head.append(style);
 };
 LeetCodeV2.prototype.insertToAnchorElement = function (elem) {
-  if (document.URL.startsWith('${getLeetCodeBaseUrl()}/explore/')) {
+  if (document.URL.startsWith(`${getLeetCodeBaseUrl()}/explore/`)) {
     // TODO: support spinner when answering problems on Explore pages
     //   action = document.getElementsByClassName('action');
     //   if (
@@ -1512,18 +1508,20 @@ chrome.storage.local.get('isSync', data => {
       });
     });
     chrome.storage.local.set({ isSync: true }, _ => {
-      console.log('LeetHub Synced to local values');
+      console.log('CodeHub Synced to local values');
     });
   } else {
-    console.log('LeetHub Local storage already synced!');
+    console.log('CodeHub Local storage already synced!');
   }
 });
 
 const loader = (leetCode, suffix) => {
   let iterations = 0;
+  let uploadInProgress = false;
   // start upload indicator here
   leetCode.startSpinner();
   const intervalId = setInterval(async () => {
+    if (uploadInProgress) return;
     try {
       if (leetCode instanceof LeetCodeV2) {
         const { complete, success } = await leetCode.checkSubmissionStatus();
@@ -1557,6 +1555,8 @@ const loader = (leetCode, suffix) => {
         // If successful, stop polling
         clearInterval(intervalId);
       }
+
+      uploadInProgress = true;
 
       // For v2, query LeetCode API for submission results
       await leetCode.init();
@@ -1618,7 +1618,7 @@ const loader = (leetCode, suffix) => {
         date: getTodaysDate(),
         problemTopic: probStats.problemTopic,
       };
-      const probStatsCommitMsg = `Time: ${probStats.time} (${probStats.timePercentile}%), Space: ${probStats.space} (${probStats.spacePercentile}%) - LeetHub`; // default commit
+      const probStatsCommitMsg = `Time: ${probStats.time} (${probStats.timePercentile}%), Space: ${probStats.space} (${probStats.spacePercentile}%) - CodeHub`; // default commit
       const commitMsg = (await getCustomCommitMessage(problemContext)) || probStatsCommitMsg;
 
       const { useTimestampFilename = false } =
@@ -1638,24 +1638,35 @@ const loader = (leetCode, suffix) => {
       const updateCode = leetCode.findAndUploadCode(problemName, fileName, commitMsg, 'upload');
 
       /* Group problem into its relevant topics */
-      const updateRepoReadMe = updateReadmeTopicTagsWithProblem(
+      const updateRepoReadMePromise = updateReadmeTopicTagsWithProblem(
         leetCode.questionDetails?.topicTags,
         problemName,
       );
 
-      await Promise.all([updateReadMe, updateNotes, updateCode, updateRepoReadMe]);
+      // Upload code and notes first; topic README update is best-effort and must not block code upload
+      const criticalUploads = [updateReadMe, updateNotes, updateCode];
+      await Promise.all(criticalUploads);
+
+      // Fire-and-forget topic README update
+      if (updateRepoReadMePromise) {
+        updateRepoReadMePromise.catch(err => {
+          console.warn('[CodeHub] Topic README update failed (non-blocking):', err.message);
+        });
+      }
 
       uploadState.uploading = false;
       leetCode.markUploaded();
 
       if (!alreadyCompleted) {
-        incrementStats();
+        await incrementStats();
       }
     } catch (err) {
       uploadState.uploading = false;
       leetCode.markUploadFailed();
       clearInterval(intervalId);
-      console.log(err);
+      console.error('[CodeHub] LeetCode upload failed:', err);
+    } finally {
+      uploadInProgress = false;
     }
   }, 1000);
 };
@@ -1720,7 +1731,9 @@ async function appendProblemToReadme(topic, markdownFile, hook, problem) {
       return '';
     }
   } else {
-    path = useDifficultyFolder ? `${basePath}/${difficulty}/${filePath}` : `${filePath}`;
+    path = useDifficultyFolder
+      ? `${basePath}/${difficulty}/${filePath}`
+      : `${basePath}/${filePath}`;
   }
 
   const url = `https://github.com/${hook}/tree/main/${path}`;
@@ -1866,7 +1879,7 @@ function sortTopicsInReadme(markdownFile) {
   return markdownFile;
 }
 
-// Function to convert questionSlug to problemName using the same logic as LeetHub
+// Function to convert questionSlug to problemName using the same logic as CodeHub
 async function questionSlugToProblemName(questionSlug) {
   // Query LeetCode GraphQL to get question details
   const questionDetailsQuery = {
@@ -1894,7 +1907,7 @@ async function questionSlugToProblemName(questionSlug) {
   };
 
   try {
-    const response = await fetch('https://leetcode.com/graphql/', questionDetailsOptions);
+    const response = await fetch(`${getLeetCodeBaseUrl()}/graphql/`, questionDetailsOptions);
     const data = await response.json();
     const questionDetails = data.data.question;
 
@@ -1921,7 +1934,7 @@ async function getLastCommitMessage(problemName) {
     const { useLanguageFolder = false } = await chrome.storage.local.get('useLanguageFolder');
 
     if (!stats?.shas || !leethub_token || !leethub_hook) {
-      return 'Add solution post - LeetHub';
+      return 'Add solution post - CodeHub';
     }
 
     // Try to find the exact problem name, or one that contains the problem name
@@ -1969,48 +1982,46 @@ async function getLastCommitMessage(problemName) {
     };
 
     try {
-      const response = await fetch(commitsUrl, options);
-      if (response.status === 200) {
-        const commits = await response.json();
+      const response = await window.codehubGithubJson(commitsUrl, options);
+      const commits = response;
 
-        if (commits && commits.length > 0) {
-          // Find the most recent commit that's not for README.md, NOTES.md, or Solution.md
-          for (const commit of commits) {
-            const message = commit.commit.message;
+      if (commits && commits.length > 0) {
+        // Find the most recent commit that's not for README.md, NOTES.md, or Solution.md
+        for (const commit of commits) {
+          const message = commit.commit.message;
 
-            // Skip commits for README, NOTES, or previous solution posts
-            if (
-              message.includes('Create readme') ||
-              message.includes('Attach Notes') ||
-              message.includes('Prepend discussion') ||
-              message.includes('solution post') ||
-              message.includes('Add solution post')
-            ) {
-              continue;
-            }
+          // Skip commits for README, NOTES, or previous solution posts
+          if (
+            message.includes('Create readme') ||
+            message.includes('Attach Notes') ||
+            message.includes('Prepend discussion') ||
+            message.includes('solution post') ||
+            message.includes('Add solution post')
+          ) {
+            continue;
+          }
 
-            // Look for commits that contain time/space stats (typical solution commits)
-            if (
-              message.includes('Time:') &&
-              message.includes('Space:') &&
-              message.includes('LeetHub')
-            ) {
-              return message;
-            }
-
-            // If it's not a README/NOTES/solution-post and doesn't have stats, it might still be a solution
-            // (in case of custom commit messages or older format)
+          // Look for commits that contain time/space stats (typical solution commits)
+          if (
+            message.includes('Time:') &&
+            message.includes('Space:') &&
+            message.includes('CodeHub')
+          ) {
             return message;
           }
+
+          // If it's not a README/NOTES/solution-post and doesn't have stats, it might still be a solution
+          // (in case of custom commit messages or older format)
+          return message;
         }
       }
     } catch {
       // Silently handle API errors
     }
-    return 'Add solution post - LeetHub';
+    return 'Add solution post - CodeHub';
   } catch (error) {
     console.error('Error getting last commit message:', error);
-    return 'Add solution post - LeetHub';
+    return 'Add solution post - CodeHub';
   }
 }
 
