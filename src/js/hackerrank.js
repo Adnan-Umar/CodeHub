@@ -22,21 +22,52 @@ function getHackerRankProblemSlug() {
  * Falls back to the CodeMirror editor or a textarea if Monaco is not found.
  */
 function getHackerRankCode() {
-  // Try Monaco editor first (most common)
+  // Try 1: Monaco editor via getModels()
   if (window.monaco && window.monaco.editor) {
-    const editors = window.monaco.editor.getEditors();
-    if (editors && editors.length > 0) {
-      return editors[0].getValue();
+    try {
+      const models = window.monaco.editor.getModels();
+      if (models && models.length > 0) {
+        return models[0].getValue();
+      }
+    } catch {
+      // ignore
+    }
+
+    // Try 2: Monaco editor via getEditors()
+    try {
+      const editors = window.monaco.editor.getEditors();
+      if (editors && editors.length > 0) {
+        return editors[0].getValue();
+      }
+    } catch {
+      // ignore
     }
   }
-  // Fallback: CodeMirror
+
+  // Try 3: Hidden textarea used by some HR loaders
+  const hiddenTextarea = document.querySelector(
+    'textarea[class*="editor"], textarea[class*="code"], ._editor-textarea',
+  );
+  if (hiddenTextarea) {
+    return hiddenTextarea.value || hiddenTextarea.textContent;
+  }
+
+  // Try 4: CodeMirror legacy
   const cm = document.querySelector('.CodeMirror');
   if (cm && cm.CodeMirror) {
     return cm.CodeMirror.getValue();
   }
-  // Last resort: grab from a textarea
-  const textarea = document.querySelector('textarea.editor-input, .editor textarea');
-  if (textarea) return textarea.value;
+
+  // Try 5: Ace editor fallback
+  const aceEditor = document.querySelector('.ace_editor');
+  if (aceEditor && window.ace) {
+    try {
+      return window.ace.edit(aceEditor).getValue();
+    } catch {
+      // ignore
+    }
+  }
+
   return null;
 }
 
@@ -153,8 +184,11 @@ async function handleHackerRankSubmission(detail) {
   hrShowSpinner();
 
   try {
+    // Small delay to ensure editor is fully loaded
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const code = detail?.code || getHackerRankCode();
-    if (!code) throw new Error('Could not extract solution code.');
+    if (!code) throw new Error('Could not extract solution code from editor.');
 
     const language = detail?.language || getHackerRankLanguage() || 'text';
     const difficulty = detail?.difficulty || '';
@@ -163,6 +197,7 @@ async function handleHackerRankSubmission(detail) {
     const readmeContent = `## [${problemSlug}](${problemUrl})\n\n*Platform: HackerRank*\n`;
     const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
+    console.log(`[CodeHub HackerRank] Uploading ${problemSlug}...`);
     await leethubPushSolution({
       platformFolder: HACKERRANK_PLATFORM_FOLDER,
       problemName: problemSlug,
@@ -178,7 +213,7 @@ async function handleHackerRankSubmission(detail) {
     console.log(`[CodeHub HackerRank] Successfully pushed ${problemSlug}`);
   } catch (err) {
     hrMarkFailed();
-    console.error(`[CodeHub HackerRank] Upload failed:`, err);
+    console.error(`[CodeHub HackerRank] Upload failed:`, err.message || err);
   }
 }
 

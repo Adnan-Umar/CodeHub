@@ -14,18 +14,43 @@ function getCode360ProblemSlug() {
 }
 
 function getCode360Code() {
+  // Try 1: Monaco editor via getModels()
   if (window.monaco && window.monaco.editor) {
-    const editors = window.monaco.editor.getEditors?.() || [];
-    if (editors.length > 0) {
-      return editors[0].getValue();
+    try {
+      const models = window.monaco.editor.getModels();
+      if (models && models.length > 0) {
+        return models[0].getValue();
+      }
+    } catch {
+      // ignore
+    }
+
+    // Try 2: Monaco editor via getEditors()
+    try {
+      const editors = window.monaco.editor.getEditors?.() || [];
+      if (editors.length > 0) {
+        return editors[0].getValue();
+      }
+    } catch {
+      // ignore
     }
   }
 
+  // Try 3: CodeMirror
   const cm = document.querySelector('.CodeMirror');
   if (cm && cm.CodeMirror) {
     return cm.CodeMirror.getValue();
   }
 
+  // Try 4: Hidden textarea
+  const editorTextarea = document.querySelector(
+    'textarea[class*="editor"], textarea[class*="code"]',
+  );
+  if (editorTextarea) {
+    return editorTextarea.value || editorTextarea.textContent;
+  }
+
+  // Try 5: Any textarea
   const textarea = document.querySelector('textarea');
   if (textarea) {
     return textarea.value;
@@ -148,6 +173,7 @@ async function handleCode360Submission(detail) {
     const readmeContent = `## [${problemSlug}](${problemUrl})\n\n*Platform: Code360*\n`;
     const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
+    console.log(`[CodeHub Code360] Uploading ${problemSlug}...`);
     await leethubPushSolution({
       platformFolder: CODE360_PLATFORM_FOLDER,
       problemName: problemSlug,
@@ -162,7 +188,7 @@ async function handleCode360Submission(detail) {
     console.log(`[CodeHub Code360] Successfully pushed ${problemSlug}`);
   } catch (err) {
     code360MarkFailed();
-    console.error(`[CodeHub Code360] Upload failed:`, err);
+    console.error(`[CodeHub Code360] Upload failed:`, err.message || err);
   }
 }
 
@@ -170,21 +196,50 @@ window.listenCodeHubEvents({
   codingNinjasSubmission: detail => handleCode360Submission(detail),
 });
 
-const code360Observer = new MutationObserver(() => {
-  const accepted = document.querySelector(
-    '[class*="accepted"], [class*="AC"], .verdict, .result, .text-green',
-  );
-
-  if (accepted && !accepted.dataset.codehubProcessed) {
-    accepted.dataset.codehubProcessed = 'true';
-    handleCode360Submission({ status: accepted.innerText?.trim() || 'AC' });
+function scanCode360Result() {
+  const allElements = document.querySelectorAll('body *');
+  for (const el of allElements) {
+    const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+    if (
+      (text.includes('accepted') ||
+        text.includes('congratulations') ||
+        text === 'ac' ||
+        text === 'done') &&
+      el.children.length === 0 &&
+      text.length < 50 &&
+      !el.dataset.codehubProcessed
+    ) {
+      el.dataset.codehubProcessed = 'true';
+      code360ShowSpinner();
+      handleCode360Submission({ status: text.includes('congratulations') ? 'Accepted' : text });
+      return true;
+    }
   }
+  return false;
+}
+
+const code360Observer = new MutationObserver(() => {
+  scanCode360Result();
 });
+
+// Also poll periodically as a fallback
+let code360PollCount = 0;
+const code360PollInterval = setInterval(() => {
+  if (code360PollCount++ > 30) {
+    clearInterval(code360PollInterval);
+    return;
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    scanCode360Result();
+  }
+}, 2000);
 
 setTimeout(() => {
   if (document.body) {
     code360Observer.observe(document.body, { childList: true, subtree: true });
   }
-}, 2000);
+  // Initial scan
+  scanCode360Result();
+}, 1500);
 
 console.log('[CodeHub] Code360 content script loaded.');

@@ -24,7 +24,7 @@ CodeHub is a Chrome extension that automatically pushes your accepted coding sol
 
 If a platform folder does not exist yet, CodeHub creates it before uploading your solution.
 
-CodeHub is forked from [LeetHub-3.0](https://github.com/raphaelheinz/LeetHub-3.0) and extended with multi-platform support.
+CodeHub is forked from [LeetHub-3.0](https://github.com/Adnan-Umar/CodeHub) and extended with multi-platform support.
 
 
 ## Why CodeHub?

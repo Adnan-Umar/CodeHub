@@ -11,10 +11,29 @@ function getGFGProblemSlug() {
 }
 
 function getGFGCode() {
+  // Try 1: CodeMirror (most common on GFG)
   const cm = document.querySelector('.CodeMirror');
   if (cm && cm.CodeMirror) {
     return cm.CodeMirror.getValue();
   }
+
+  // Try 2: Monaco editor
+  if (window.monaco && window.monaco.editor) {
+    try {
+      const models = window.monaco.editor.getModels();
+      if (models && models.length > 0) {
+        return models[0].getValue();
+      }
+      const editors = window.monaco.editor.getEditors();
+      if (editors && editors.length > 0) {
+        return editors[0].getValue();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Try 3: Ace editor
   const aceEditor = document.querySelector('.ace_editor');
   if (aceEditor && window.ace) {
     try {
@@ -23,10 +42,15 @@ function getGFGCode() {
       // ignore
     }
   }
-  if (window.monaco && window.monaco.editor) {
-    const editors = window.monaco.editor.getEditors();
-    if (editors && editors.length > 0) return editors[0].getValue();
+
+  // Try 4: Any textarea in the editor area
+  const editorTextarea = document.querySelector(
+    'textarea[class*="editor"], textarea[class*="code"]',
+  );
+  if (editorTextarea) {
+    return editorTextarea.value || editorTextarea.textContent;
   }
+
   return null;
 }
 
@@ -145,6 +169,7 @@ async function handleGFGSubmission(detail) {
     const readmeContent = `## [${title}](${problemUrl})\n\n**Difficulty**: ${difficulty || 'N/A'}  \n*Platform: GeeksForGeeks*\n`;
     const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
+    console.log(`[CodeHub GFG] Uploading ${problemSlug}...`);
     await leethubPushSolution({
       platformFolder: GFG_PLATFORM_FOLDER,
       problemName: problemSlug,
@@ -159,7 +184,7 @@ async function handleGFGSubmission(detail) {
     console.log(`[CodeHub GFG] Successfully pushed ${problemSlug}`);
   } catch (err) {
     gfgMarkFailed();
-    console.error(`[CodeHub GFG] Upload failed:`, err);
+    console.error(`[CodeHub GFG] Upload failed:`, err.message || err);
   }
 }
 
@@ -168,18 +193,47 @@ window.listenCodeHubEvents({
   leetHubGFGSubmission: detail => handleGFGSubmission(detail),
 });
 
-const gfgResultObserver = new MutationObserver(() => {
-  const resultElem = document.querySelector(
-    '[class*="result-ac"], [class*="accepted"], .verdict.accepted, .text-green',
-  );
-  if (resultElem && !resultElem.dataset.codehubProcessed) {
-    resultElem.dataset.codehubProcessed = 'true';
-    handleGFGSubmission({ status: 'Accepted' });
+function scanGFGResult() {
+  const allElements = document.querySelectorAll('body *');
+  for (const el of allElements) {
+    const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+    if (
+      (text.includes('accepted') || text.includes('congratulations') || text === 'ac') &&
+      el.children.length === 0 &&
+      text.length < 50 &&
+      !el.dataset.codehubProcessed
+    ) {
+      el.dataset.codehubProcessed = 'true';
+      gfgShowSpinner();
+      handleGFGSubmission({ status: text.includes('congratulations') ? 'Accepted' : text });
+      return true;
+    }
   }
+  return false;
+}
+
+const gfgResultObserver = new MutationObserver(() => {
+  scanGFGResult();
 });
 
-setTimeout(() => {
-  gfgResultObserver.observe(document.body, { childList: true, subtree: true });
+// Also poll periodically as a fallback
+let gfgPollCount = 0;
+const gfgPollInterval = setInterval(() => {
+  if (gfgPollCount++ > 30) {
+    clearInterval(gfgPollInterval);
+    return;
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    scanGFGResult();
+  }
 }, 2000);
+
+setTimeout(() => {
+  if (document.body) {
+    gfgResultObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  // Initial scan
+  scanGFGResult();
+}, 1500);
 
 console.log('[CodeHub] GeeksForGeeks content script loaded.');

@@ -12,27 +12,64 @@ const CODEHUB_MESSAGE_SOURCE = 'codehub-extension';
  * Proxies GitHub API requests through the background service worker so
  * uploads work reliably under Manifest V3 host permission rules.
  */
-async function codehubGithubFetch(url, options = {}) {
-  const response = await chrome.runtime.sendMessage({
-    type: 'CODEHUB_GITHUB_REQUEST',
-    payload: {
-      url,
-      method: options.method || 'GET',
-      headers: options.headers || {},
-      body: options.body,
-    },
-  });
+async function codehubGithubFetch(url, options = {}, timeoutMs = 30000) {
+  try {
+    const response = await Promise.race([
+      chrome.runtime.sendMessage({
+        type: 'CODEHUB_GITHUB_REQUEST',
+        payload: {
+          url,
+          method: options.method || 'GET',
+          headers: options.headers || {},
+          body: options.body,
+        },
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('GitHub API request timed out')), timeoutMs),
+      ),
+    ]);
 
-  if (chrome.runtime.lastError) {
-    throw new Error(chrome.runtime.lastError.message);
+    if (chrome.runtime.lastError) {
+      throw new Error(chrome.runtime.lastError.message);
+    }
+    if (!response) {
+      throw new Error('No response from CodeHub background worker');
+    }
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response;
+  } catch (err) {
+    // Fallback: try direct fetch (works because host_permissions includes api.github.com)
+    console.warn(`[CodeHub] Background worker failed, trying direct fetch:`, err.message);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const directRes = await fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: options.headers?.Authorization || '',
+          Accept: 'application/vnd.github.v3+json',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const text = await directRes.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = null;
+      }
+      return { ok: directRes.ok, status: directRes.status, json, text };
+    } catch (directErr) {
+      clearTimeout(timeoutId);
+      throw new Error(
+        `GitHub API request failed: ${err.message}. Direct fallback also failed: ${directErr.message}`,
+      );
+    }
   }
-  if (!response) {
-    throw new Error('No response from CodeHub background worker');
-  }
-  if (response.error) {
-    throw new Error(response.error);
-  }
-  return response;
 }
 
 async function codehubGithubJson(url, options = {}) {

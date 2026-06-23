@@ -187,16 +187,13 @@ function handlePlatformResponse(url, method, requestBody, responseText) {
     }
   }
 
-  if (/geeksforgeeks\.(org|com)/.test(loweredUrl) && /submit|judge|problem/.test(loweredUrl)) {
+  if (/geeksforgeeks\.(org|com)/.test(loweredUrl)) {
     if (isAcceptedDetail(detail, 'gfg')) {
       emitCodeHubEvent('gfgSubmission', enrichSubmissionDetail(detail, 'gfg'));
     }
   }
 
-  if (
-    (/codingninjas\.com/.test(loweredUrl) || /naukri\.com\/code360/.test(loweredUrl)) &&
-    /submit|judge/.test(loweredUrl)
-  ) {
+  if (/codingninjas\.com/.test(loweredUrl) || /naukri\.com\/code360/.test(loweredUrl)) {
     if (isAcceptedDetail(detail, 'codingninjas')) {
       emitCodeHubEvent('codingNinjasSubmission', enrichSubmissionDetail(detail, 'codingninjas'));
     }
