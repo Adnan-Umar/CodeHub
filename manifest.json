@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CodeHub-3.0",
   "description": "Automatically integrate your Leetcode submissions to GitHub",
-  "homepage_url": "https://github.com/raphaelheinz/LeetHub-3.0",
+  "homepage_url": "https://github.com/Adnan-Umar/CodeHub",
   "version": "0.0.16",
   "author": "Raphael Heinz",
   "action": {
