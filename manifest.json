@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "CodeHub-3.0",
+  "description": "Automatically integrate your Leetcode submissions to GitHub",
+  "homepage_url": "https://github.com/raphaelheinz/LeetHub-3.0",
+  "version": "0.0.16",
+  "author": "Raphael Heinz",
+  "action": {
+    "default_icon": "assets/thumbnail.png",
+    "default_popup": "src/html/popup.html"
+  },
+  "icons": {
+    "16": "assets/thumbnail.png",
+    "48": "assets/thumbnail.png",
+    "128": "assets/thumbnail.png"
+  },
+  "background": {
+    "service_worker": "src/js/background.js"
+  },
+  "permissions": ["unlimitedStorage", "storage"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://leetcode.com/*",
+        "https://leetcode.cn/*",
+        "https://hackerrank.com/*",
+        "https://www.hackerrank.com/*",
+        "https://practice.geeksforgeeks.org/*",
+        "https://www.geeksforgeeks.org/problems/*",
+        "https://www.naukri.com/code360/*",
+        "https://codingninjas.com/codestudio/*"
+      ],
+      "js": ["src/js/interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://leetcode.com/*",
+        "https://leetcode.cn/*",
+        "https://github.com/*",
+        "https://hackerrank.com/*",
+        "https://www.hackerrank.com/*",
+        "https://practice.geeksforgeeks.org/*",
+        "https://www.geeksforgeeks.org/problems/*",
+        "https://www.naukri.com/code360/*",
+        "https://codingninjas.com/codestudio/*"
+      ],
+      "js": [
+        "src/js/github.js",
+        "src/js/leetcode.js",
+        "src/js/authorize.js",
+        "src/js/hackerrank.js",
+        "src/js/geeksforgeeks.js",
+        "src/js/codingninja.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/js/interceptor.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
