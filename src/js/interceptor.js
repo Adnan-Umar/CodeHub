@@ -183,12 +183,15 @@ function handlePlatformResponse(url, method, requestBody, responseText) {
       requestData?.submissionCode ??
       requestData?.program ??
       requestData?.typed_code ??
+      requestData?.snippet ??
+      requestData?.answer ??
+      requestData?.data?.code ??
       responseData?.code,
   };
 
   if (/hackerrank\.com/.test(loweredUrl)) {
     if (isAcceptedDetail(detail, 'hackerrank')) {
-      emitCodeHubEvent('hackerRankSubmission', enrichSubmissionDetail(detail, 'hackerrank'));
+      emitCodeHubEvent('hackerRankSubmission', { ...detail, platform: 'HackerRank' });
     }
   }
 

@@ -102,7 +102,7 @@ function getHackerRankCode() {
   return null;
 }
 
-async function getHackerRankCodeWithRetry(attempts = 6, delayMs = 500) {
+async function getHackerRankCodeWithRetry(attempts = 8, delayMs = 400) {
   for (let i = 0; i < attempts; i++) {
     const code = getHackerRankCode();
     if (code && code.trim().length > 2) {
@@ -112,7 +112,55 @@ async function getHackerRankCodeWithRetry(attempts = 6, delayMs = 500) {
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
-  return getHackerRankCode();
+  // Final direct document-level attempt (no shadow DOM)
+  return getHackerRankCodeDirect();
+}
+
+function getHackerRankCodeDirect() {
+  // Direct document-level Monaco check (bypasses shadow DOM entirely)
+  if (window.monaco && window.monaco.editor) {
+    try {
+      const models = window.monaco.editor.getModels();
+      if (models && models.length > 0) {
+        const val = models[0].getValue();
+        if (val && val.trim().length > 2) return val;
+      }
+      const editors = window.monaco.editor.getEditors();
+      if (editors && editors.length > 0) {
+        const val = editors[0].getValue();
+        if (val && val.trim().length > 2) return val;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Look for contenteditable divs that contain code
+  const editableDivs = document.querySelectorAll('[contenteditable="true"]');
+  for (const div of editableDivs) {
+    const val = div.innerText || div.textContent || '';
+    if (val && val.trim().length > 2 && /[a-zA-Z]/.test(val)) {
+      return val.trim();
+    }
+  }
+
+  // Look for monaco-container divs
+  const monacoContainers = document.querySelectorAll(
+    '.monaco-container, .monaco-editor, [data-monaco]',
+  );
+  for (const container of monacoContainers) {
+    const textarea = container.querySelector('textarea');
+    if (textarea && textarea.value.trim().length > 2) {
+      return textarea.value;
+    }
+    const codeEl = container.querySelector('code, pre, .line');
+    if (codeEl) {
+      const val = codeEl.innerText || codeEl.textContent || '';
+      if (val.trim().length > 2) return val.trim();
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -232,7 +280,14 @@ async function handleHackerRankSubmission(detail) {
   hrShowSpinner();
 
   try {
-    const code = detail?.code || (await getHackerRankCodeWithRetry());
+    let code = detail?.code || null;
+    if (!code) {
+      code = await getHackerRankCodeWithRetry();
+    }
+    if (!code) {
+      // Last resort: try to read from any available source
+      code = getHackerRankCodeDirect();
+    }
     if (!code) throw new Error('Could not extract solution code from editor.');
 
     const language = detail?.language || getHackerRankLanguage() || 'text';
