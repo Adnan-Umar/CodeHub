@@ -18,62 +18,94 @@ function getHackerRankProblemSlug() {
 
 /**
  * Reads the solution code from HackerRank's Monaco editor.
- * Falls back to the CodeMirror editor or a textarea if Monaco is not found.
+ * Modern HR uses Web Components with shadow DOM, so we pierce through
+ * shadow roots to find the editor instance.
  */
 function getHackerRankCode() {
-  // Try 1: Monaco editor via getModels()
-  if (window.monaco && window.monaco.editor) {
-    try {
-      const models = window.monaco.editor.getModels();
-      if (models && models.length > 0) {
-        return models[0].getValue();
+  // Helper: recursively search through shadow DOMs
+  function searchRoot(root, depth = 0) {
+    if (depth > 5) return null;
+
+    // Try Monaco models in this root
+    if (root.monaco && root.monaco.editor) {
+      try {
+        const models = root.monaco.editor.getModels();
+        if (models && models.length > 0 && models[0].getValue().trim().length > 0) {
+          return models[0].getValue();
+        }
+        const editors = root.monaco.editor.getEditors();
+        if (editors && editors.length > 0 && editors[0].getValue().trim().length > 0) {
+          return editors[0].getValue();
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
 
-    // Try 2: Monaco editor via getEditors()
-    try {
-      const editors = window.monaco.editor.getEditors();
-      if (editors && editors.length > 0) {
-        return editors[0].getValue();
+    // Try Ace editor
+    if (root.ace) {
+      try {
+        const aceEl = root.querySelector('.ace_editor');
+        if (aceEl) {
+          const val = root.ace.edit(aceEl).getValue();
+          if (val && val.trim().length > 0) return val;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
+
+    // Try CodeMirror
+    const cm = root.querySelector('.CodeMirror');
+    if (cm && cm.CodeMirror) {
+      const val = cm.CodeMirror.getValue();
+      if (val && val.trim().length > 0) return val;
+    }
+
+    // Try any textarea with class containing editor/code
+    const textarea = root.querySelector('textarea[class*="editor"], textarea[class*="code"]');
+    if (textarea) {
+      const val = textarea.value || textarea.textContent;
+      if (val && val.trim().length > 0) return val;
+    }
+
+    // Recurse into child shadow roots
+    const allElements = root.querySelectorAll('*');
+    for (const el of allElements) {
+      if (el.shadowRoot) {
+        const found = searchRoot(el.shadowRoot, depth + 1);
+        if (found) return found;
+      }
+    }
+
+    // Also check the root itself for a shadowRoot property
+    if (root.shadowRoot) {
+      return searchRoot(root.shadowRoot, depth + 1);
+    }
+
+    return null;
   }
 
-  // Try 3: Hidden textarea used by some HR loaders
-  const hiddenTextarea = document.querySelector(
-    'textarea[class*="editor"], textarea[class*="code"], ._editor-textarea',
-  );
-  if (hiddenTextarea) {
-    return hiddenTextarea.value || hiddenTextarea.textContent;
-  }
+  // Start search from document
+  const result = searchRoot(document);
+  if (result) return result;
 
-  // Try 4: CodeMirror legacy
-  const cm = document.querySelector('.CodeMirror');
-  if (cm && cm.CodeMirror) {
-    return cm.CodeMirror.getValue();
-  }
-
-  // Try 5: Ace editor fallback
-  const aceEditor = document.querySelector('.ace_editor');
-  if (aceEditor && window.ace) {
-    try {
-      return window.ace.edit(aceEditor).getValue();
-    } catch {
-      // ignore
+  // Global fallback: search all elements with shadowRoot
+  const allRoots = document.querySelectorAll('*');
+  for (const el of allRoots) {
+    if (el.shadowRoot) {
+      const found = searchRoot(el.shadowRoot, 1);
+      if (found) return found;
     }
   }
 
   return null;
 }
 
-async function getHackerRankCodeWithRetry(attempts = 4, delayMs = 400) {
+async function getHackerRankCodeWithRetry(attempts = 6, delayMs = 500) {
   for (let i = 0; i < attempts; i++) {
     const code = getHackerRankCode();
-    if (code && code.trim().length > 0) {
+    if (code && code.trim().length > 2) {
       return code;
     }
     if (i < attempts - 1) {

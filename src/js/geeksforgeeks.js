@@ -11,44 +11,72 @@ function getGFGProblemSlug() {
 }
 
 function getGFGCode() {
-  // Try 1: CodeMirror (most common on GFG)
-  const cm = document.querySelector('.CodeMirror');
-  if (cm && cm.CodeMirror) {
-    return cm.CodeMirror.getValue();
-  }
+  function searchRoot(root, depth = 0) {
+    if (depth > 5) return null;
 
-  // Try 2: Monaco editor
-  if (window.monaco && window.monaco.editor) {
-    try {
-      const models = window.monaco.editor.getModels();
-      if (models && models.length > 0) {
-        return models[0].getValue();
+    if (root.monaco && root.monaco.editor) {
+      try {
+        const models = root.monaco.editor.getModels();
+        if (models && models.length > 0 && models[0].getValue().trim().length > 0) {
+          return models[0].getValue();
+        }
+        const editors = root.monaco.editor.getEditors();
+        if (editors && editors.length > 0 && editors[0].getValue().trim().length > 0) {
+          return editors[0].getValue();
+        }
+      } catch {
+        // ignore
       }
-      const editors = window.monaco.editor.getEditors();
-      if (editors && editors.length > 0) {
-        return editors[0].getValue();
+    }
+
+    const cm = root.querySelector('.CodeMirror');
+    if (cm && cm.CodeMirror) {
+      const val = cm.CodeMirror.getValue();
+      if (val && val.trim().length > 0) return val;
+    }
+
+    if (root.ace) {
+      try {
+        const aceEl = root.querySelector('.ace_editor');
+        if (aceEl) {
+          const val = root.ace.edit(aceEl).getValue();
+          if (val && val.trim().length > 0) return val;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
+
+    const textarea = root.querySelector('textarea[class*="editor"], textarea[class*="code"]');
+    if (textarea) {
+      const val = textarea.value || textarea.textContent;
+      if (val && val.trim().length > 0) return val;
+    }
+
+    const allElements = root.querySelectorAll('*');
+    for (const el of allElements) {
+      if (el.shadowRoot) {
+        const found = searchRoot(el.shadowRoot, depth + 1);
+        if (found) return found;
+      }
+    }
+
+    if (root.shadowRoot) {
+      return searchRoot(root.shadowRoot, depth + 1);
+    }
+
+    return null;
   }
 
-  // Try 3: Ace editor
-  const aceEditor = document.querySelector('.ace_editor');
-  if (aceEditor && window.ace) {
-    try {
-      return window.ace.edit(aceEditor).getValue();
-    } catch {
-      // ignore
-    }
-  }
+  const result = searchRoot(document);
+  if (result) return result;
 
-  // Try 4: Any textarea in the editor area
-  const editorTextarea = document.querySelector(
-    'textarea[class*="editor"], textarea[class*="code"]',
-  );
-  if (editorTextarea) {
-    return editorTextarea.value || editorTextarea.textContent;
+  const allRoots = document.querySelectorAll('*');
+  for (const el of allRoots) {
+    if (el.shadowRoot) {
+      const found = searchRoot(el.shadowRoot, 1);
+      if (found) return found;
+    }
   }
 
   return null;
