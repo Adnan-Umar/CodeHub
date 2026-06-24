@@ -13,62 +13,77 @@ const CODEHUB_MESSAGE_SOURCE = 'codehub-extension';
  * uploads work reliably under Manifest V3 host permission rules.
  */
 async function codehubGithubFetch(url, options = {}, timeoutMs = 30000) {
-  try {
-    const response = await Promise.race([
-      chrome.runtime.sendMessage({
-        type: 'CODEHUB_GITHUB_REQUEST',
-        payload: {
-          url,
-          method: options.method || 'GET',
-          headers: options.headers || {},
-          body: options.body,
-        },
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('GitHub API request timed out')), timeoutMs),
-      ),
-    ]);
+  let timedOut = false;
 
-    if (chrome.runtime.lastError) {
-      throw new Error(chrome.runtime.lastError.message);
-    }
-    if (!response) {
-      throw new Error('No response from CodeHub background worker');
-    }
-    if (response.error) {
-      throw new Error(response.error);
-    }
-    return response;
-  } catch (err) {
-    // Fallback: try direct fetch (works because host_permissions includes api.github.com)
-    console.warn(`[CodeHub] Background worker failed, trying direct fetch:`, err.message);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const directRes = await fetch(url, {
-        ...options,
-        headers: {
-          ...options.headers,
-          Authorization: options.headers?.Authorization || '',
-          Accept: 'application/vnd.github.v3+json',
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      const text = await directRes.text();
-      let json = null;
-      try {
-        json = text ? JSON.parse(text) : null;
-      } catch {
-        json = null;
+  const messagePromise = chrome.runtime
+    .sendMessage({
+      type: 'CODEHUB_GITHUB_REQUEST',
+      payload: {
+        url,
+        method: options.method || 'GET',
+        headers: options.headers || {},
+        body: options.body,
+      },
+    })
+    .then(response => {
+      if (timedOut) return null;
+      if (chrome.runtime.lastError) {
+        throw new Error(chrome.runtime.lastError.message);
       }
-      return { ok: directRes.ok, status: directRes.status, json, text };
-    } catch (directErr) {
-      clearTimeout(timeoutId);
-      throw new Error(
-        `GitHub API request failed: ${err.message}. Direct fallback also failed: ${directErr.message}`,
-      );
+      if (!response) {
+        throw new Error('No response from CodeHub background worker');
+      }
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      return response;
+    })
+    .catch(err => {
+      if (timedOut) return null;
+      throw err;
+    });
+
+  const timerHandle = setTimeout(() => {
+    timedOut = true;
+  }, timeoutMs);
+
+  let result;
+  try {
+    result = await messagePromise;
+  } finally {
+    clearTimeout(timerHandle);
+  }
+
+  if (result) return result;
+
+  // Timed out — fallback to direct fetch (allowed by host_permissions)
+  console.warn(`[CodeHub] Background worker timed out, falling back to direct fetch`);
+  const controller = new AbortController();
+  const fallbackTimeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const directRes = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: options.headers?.Authorization || '',
+        Accept: 'application/vnd.github.v3+json',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(fallbackTimeoutId);
+    const text = await directRes.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
     }
+    return { ok: directRes.ok, status: directRes.status, json, text };
+  } catch (directErr) {
+    clearTimeout(fallbackTimeoutId);
+    throw new Error(
+      `GitHub API request failed: timed out after ${timeoutMs}ms. Direct fallback also failed: ${directErr.message}`,
+    );
   }
 }
 
