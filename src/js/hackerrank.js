@@ -71,6 +71,19 @@ function getHackerRankCode() {
   return null;
 }
 
+async function getHackerRankCodeWithRetry(attempts = 4, delayMs = 400) {
+  for (let i = 0; i < attempts; i++) {
+    const code = getHackerRankCode();
+    if (code && code.trim().length > 0) {
+      return code;
+    }
+    if (i < attempts - 1) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  return getHackerRankCode();
+}
+
 /**
  * Attempts to detect the active language on HackerRank.
  */
@@ -151,7 +164,8 @@ async function handleHackerRankSubmission(detail) {
   console.log(`[CodeHub HackerRank] Submission event received:`, detail);
 
   const problemSlug = detail?.problemSlug || getHackerRankProblemSlug();
-  const uploadKey = `${problemSlug}-${detail?.code?.length || 0}`;
+  const filenameSuffix = detail?.suffix || null;
+  const uploadKey = `${problemSlug}-${detail?.code?.length || 0}-${filenameSuffix || ''}`;
   if (uploadKey && uploadKey === lastHackerRankUploadKey) {
     return;
   }
@@ -172,6 +186,9 @@ async function handleHackerRankSubmission(detail) {
       `[CodeHub HackerRank] Submission not accepted, skipping upload. Status:`,
       statusStr,
     );
+    console.log(
+      `[CodeHub HackerRank] TIP: Use the "Push to GitHub" button in the editor toolbar to upload manually.`,
+    );
     return;
   }
 
@@ -184,10 +201,7 @@ async function handleHackerRankSubmission(detail) {
   hrShowSpinner();
 
   try {
-    // Small delay to ensure editor is fully loaded
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const code = detail?.code || getHackerRankCode();
+    const code = detail?.code || (await getHackerRankCodeWithRetry());
     if (!code) throw new Error('Could not extract solution code from editor.');
 
     const language = detail?.language || getHackerRankLanguage() || 'text';
@@ -206,6 +220,7 @@ async function handleHackerRankSubmission(detail) {
       language,
       commitMsg,
       readmeContent,
+      filenameSuffix,
     });
 
     lastHackerRankUploadKey = uploadKey;
@@ -223,27 +238,114 @@ window.listenCodeHubEvents({
   leetHubHackerRankSubmission: detail => handleHackerRankSubmission(detail),
 });
 
-const hrResultObserver = new MutationObserver(() => {
-  const accepted = document.querySelector(
-    '.submission-message, [class*="accepted"], .status.accepted, .ui-output-status-accepted, .congrats-message',
-  );
-  if (accepted) {
-    const text = accepted.innerText?.toLowerCase() || '';
+function scanHRResult() {
+  const allElements = document.querySelectorAll('body *');
+  for (const el of allElements) {
+    const text = (el.innerText || el.textContent || '').trim().toLowerCase();
     if (
       (text.includes('accepted') || text.includes('congratulations')) &&
-      !accepted.dataset.codehubProcessed
+      el.children.length === 0 &&
+      text.length < 100 &&
+      !el.dataset.codehubProcessed
     ) {
-      accepted.dataset.codehubProcessed = 'true';
+      el.dataset.codehubProcessed = 'true';
       hrShowSpinner();
       handleHackerRankSubmission({ status: 'Accepted' });
+      return true;
     }
   }
+  return false;
+}
+
+const hrResultObserver = new MutationObserver(() => {
+  scanHRResult();
 });
+
+// Periodic scan fallback
+let hrPollCount = 0;
+const hrPollInterval = setInterval(() => {
+  if (hrPollCount++ > 40) {
+    clearInterval(hrPollInterval);
+    return;
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    scanHRResult();
+  }
+}, 1500);
 
 setTimeout(() => {
   if (document.body) {
     hrResultObserver.observe(document.body, { childList: true, subtree: true });
   }
-}, 2000);
+  scanHRResult();
+}, 1500);
 
 console.log('[CodeHub] HackerRank content script loaded.');
+
+// ====== Manual Push Button (HackerRank) ======
+
+function hrGetGitIcon() {
+  const gitSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  gitSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  gitSvg.setAttribute('width', '18');
+  gitSvg.setAttribute('height', '18');
+  gitSvg.setAttribute('viewBox', '0 0 114.8625 114.8625');
+  const gitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  gitPath.setAttribute('fill', '#100f0d');
+  gitPath.setAttribute(
+    'd',
+    'm112.693375 52.3185-50.149-50.146875c-2.886625-2.88875-7.57075-2.88875-10.461375 0l-10.412625 10.4145 13.2095 13.2095C57.94975 24.759 61.47025 25.45475 63.9165 27.9015c2.461 2.462 3.150875 6.01275 2.087375 9.09375l12.732 12.7305c3.081-1.062 6.63325-.3755 9.09425 2.088875 3.4375 3.4365 3.4375 9.007375 0 12.44675-3.44 3.4395-9.00975 3.4395-12.45125 0-2.585375-2.587875-3.225125-6.387125-1.914-9.57275l-11.875-11.874V74.06075c.837375.415 1.628375.96775 2.326625 1.664 3.4375 3.437125 3.4375 9.007375 0 12.44975-3.4375 3.436-9.01125 3.436-12.44625 0-3.4375-3.442375-3.4375-9.012625 0-12.44975.849625-.848625 1.8335-1.490625 2.88325-1.920375V42.26925c-1.04975-.42975-2.03125-1.066375-2.88325-1.920875-2.6035-2.602625-3.23-6.424375-1.894625-9.622125L36.55325 17.701875 2.1660125 52.086125c-2.88818 2.891125-2.88818 7.57525 0 10.463875l50.1513625 50.146975c2.88725 2.88818125 7.569875 2.88818125 10.461375 0l49.914625-49.9146c2.889625-2.889125 2.889625-7.575625 0-10.463875',
+  );
+  gitSvg.appendChild(gitPath);
+  return gitSvg;
+}
+
+function hrAddManualPushButton() {
+  if (document.getElementById('hrManualGitSubmit')) return;
+
+  const submitBtn = document.querySelector(
+    '[data-action="submit"] button, button[data-analytics="CodeEditorSubmit"], [data-testid="submit-button"], .ui-btn-success, .submit-button',
+  );
+  if (!submitBtn) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'hrManualGitSubmit';
+  btn.className =
+    'ui-btn mx-2 px-3 py-2 rounded font-medium text-sm flex items-center gap-1 bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-600';
+  btn.textContent = 'Push ';
+  btn.appendChild(hrGetGitIcon());
+  btn.insertAdjacentText('beforeend', ' to GitHub');
+  btn.style.cssText = 'cursor:pointer; font-size:13px;';
+  btn.title = 'Push current solution to GitHub (right-click to add suffix)';
+
+  btn.addEventListener('click', () => {
+    hrShowSpinner();
+    handleHackerRankSubmission({ status: 'Accepted' });
+  });
+
+  btn.addEventListener('contextmenu', event => {
+    event.preventDefault();
+    const suffix = prompt(
+      'Add a suffix for this solution file, i.e., -bfs, -dfs. \r\nWe don\'t recommend special characters except "-".',
+    );
+    if (suffix && suffix.trim()) {
+      hrShowSpinner();
+      handleHackerRankSubmission({ status: 'Accepted', suffix: suffix.trim() });
+    }
+  });
+
+  if (submitBtn.parentElement) {
+    submitBtn.parentElement.insertBefore(btn, submitBtn);
+  }
+}
+
+// Inject manual push button after editor is ready
+setTimeout(() => {
+  hrAddManualPushButton();
+  // Retry a few times in case editor loads after content script
+  let retries = 0;
+  const retryInterval = setInterval(() => {
+    hrAddManualPushButton();
+    if (++retries > 5) clearInterval(retryInterval);
+  }, 2000);
+}, 3000);

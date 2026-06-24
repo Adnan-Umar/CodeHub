@@ -181,7 +181,7 @@ function handlePlatformResponse(url, method, requestBody, responseText) {
       responseData?.code,
   };
 
-  if (/hackerrank\.com/.test(loweredUrl) && /submissions|submit|checker/.test(loweredUrl)) {
+  if (/hackerrank\.com/.test(loweredUrl)) {
     if (isAcceptedDetail(detail, 'hackerrank')) {
       emitCodeHubEvent('hackerRankSubmission', enrichSubmissionDetail(detail, 'hackerrank'));
     }
