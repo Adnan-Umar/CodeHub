@@ -403,43 +403,29 @@ async function leethubPushSolution({
   const storageKey = `${platformFolder}/${problemName}`;
   const existingSha = safeStats.shas?.[storageKey]?.[baseFilename] ?? null;
 
-  const encodedCode = btoa(unescape(encodeURIComponent(code)));
+  // Guard: prevent duplicate concurrent uploads for the same problem
+  if (leethubPushSolution._inProgress?.has(storageKey)) {
+    console.log(`[CodeHub] Already uploading ${storageKey}, skipping duplicate.`);
+    return;
+  }
+  leethubPushSolution._inProgress = leethubPushSolution._inProgress || new Set();
+  leethubPushSolution._inProgress.add(storageKey);
 
-  // Ensure the platform (and optional difficulty) directory exists on GitHub
-  await ensureGitDirectory(
-    leethub_token,
-    leethub_hook,
-    platformFolder,
-    useDifficultyFolder ? difficulty : '',
-  );
+  try {
+    const encodedCode = btoa(unescape(encodeURIComponent(code)));
 
-  // Handle 409 conflict by fetching latest SHA and retrying
-  async function uploadWithRetry(sha) {
-    try {
-      return await githubUpload(
-        leethub_token,
-        leethub_hook,
-        encodedCode,
-        platformFolder,
-        difficulty,
-        problemName,
-        baseFilename,
-        sha,
-        commitMsg,
-        useDifficultyFolder,
-      );
-    } catch (err) {
-      if (err.message === '409') {
-        const latest = await githubGetFile(
-          leethub_token,
-          leethub_hook,
-          platformFolder,
-          difficulty,
-          problemName,
-          baseFilename,
-          useDifficultyFolder,
-        );
-        return githubUpload(
+    // Ensure the platform (and optional difficulty) directory exists on GitHub
+    await ensureGitDirectory(
+      leethub_token,
+      leethub_hook,
+      platformFolder,
+      useDifficultyFolder ? difficulty : '',
+    );
+
+    // Handle 409 conflict by fetching latest SHA and retrying
+    async function uploadWithRetry(sha) {
+      try {
+        return await githubUpload(
           leethub_token,
           leethub_hook,
           encodedCode,
@@ -447,35 +433,64 @@ async function leethubPushSolution({
           difficulty,
           problemName,
           baseFilename,
-          latest?.sha ?? null,
+          sha,
           commitMsg,
           useDifficultyFolder,
         );
+      } catch (err) {
+        if (err.message === '409') {
+          const latest = await githubGetFile(
+            leethub_token,
+            leethub_hook,
+            platformFolder,
+            difficulty,
+            problemName,
+            baseFilename,
+            useDifficultyFolder,
+          );
+          return githubUpload(
+            leethub_token,
+            leethub_hook,
+            encodedCode,
+            platformFolder,
+            difficulty,
+            problemName,
+            baseFilename,
+            latest?.sha ?? null,
+            commitMsg,
+            useDifficultyFolder,
+          );
+        }
+        throw err;
       }
-      throw err;
     }
+
+    const uploads = [uploadWithRetry(existingSha ?? null)];
+
+    // Upload README if provided and not already uploaded
+    if (readmeContent && !safeStats.shas?.[storageKey]?.['README.md']) {
+      const encodedReadme = btoa(unescape(encodeURIComponent(readmeContent)));
+      uploads.push(
+        githubUpload(
+          leethub_token,
+          leethub_hook,
+          encodedReadme,
+          platformFolder,
+          difficulty,
+          problemName,
+          'README.md',
+          null,
+          `Create README: ${problemName}`,
+          useDifficultyFolder,
+        ),
+      );
+    }
+
+    await Promise.all(uploads);
+  } catch (err) {
+    console.error(`[CodeHub] Upload failed for ${storageKey}:`, err.message || err);
+    throw err;
+  } finally {
+    leethubPushSolution._inProgress?.delete(storageKey);
   }
-
-  const uploads = [uploadWithRetry(existingSha)];
-
-  // Upload README if provided and not already uploaded
-  if (readmeContent && !safeStats.shas?.[storageKey]?.['README.md']) {
-    const encodedReadme = btoa(unescape(encodeURIComponent(readmeContent)));
-    uploads.push(
-      githubUpload(
-        leethub_token,
-        leethub_hook,
-        encodedReadme,
-        platformFolder,
-        difficulty,
-        problemName,
-        'README.md',
-        null,
-        `Create README: ${problemName}`,
-        useDifficultyFolder,
-      ),
-    );
-  }
-
-  await Promise.all(uploads);
 }

@@ -2,6 +2,8 @@
 const GFG_PLATFORM_FOLDER = 'GeeksForGeeks';
 
 function getGFGProblemSlug() {
+  const host = window.location.hostname;
+  if (!host.includes('geeksforgeeks.org') && !host.includes('geeksforgeeks.com')) return null;
   const path = window.location.pathname;
   const match = path.match(/\/problems\/([^/]+)/);
   if (match) return match[1];
@@ -192,6 +194,8 @@ window.listenCodeHubEvents({
 });
 
 function scanGFGResult() {
+  const host = window.location.hostname;
+  if (!host.includes('geeksforgeeks.org') && !host.includes('geeksforgeeks.com')) return false;
   const allElements = document.querySelectorAll('body *');
   for (const el of allElements) {
     const text = (el.innerText || el.textContent || '').trim().toLowerCase();
@@ -219,6 +223,10 @@ let gfgPollCount = 0;
 const gfgPollInterval = setInterval(() => {
   if (gfgPollCount++ > 30) {
     clearInterval(gfgPollInterval);
+    return;
+  }
+  const host = window.location.hostname;
+  if (!host.includes('geeksforgeeks.org') && !host.includes('geeksforgeeks.com')) {
     return;
   }
   if (document.readyState === 'complete' || document.readyState === 'interactive') {

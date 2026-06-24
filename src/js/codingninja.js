@@ -195,6 +195,8 @@ window.listenCodeHubEvents({
 });
 
 function scanCode360Result() {
+  const host = window.location.hostname;
+  if (!host.includes('codingninjas.com') && !host.includes('naukri.com')) return false;
   const allElements = document.querySelectorAll('body *');
   for (const el of allElements) {
     const text = (el.innerText || el.textContent || '').trim().toLowerCase();
@@ -225,6 +227,10 @@ let code360PollCount = 0;
 const code360PollInterval = setInterval(() => {
   if (code360PollCount++ > 30) {
     clearInterval(code360PollInterval);
+    return;
+  }
+  const host = window.location.hostname;
+  if (!host.includes('codingninjas.com') && !host.includes('naukri.com')) {
     return;
   }
   if (document.readyState === 'complete' || document.readyState === 'interactive') {

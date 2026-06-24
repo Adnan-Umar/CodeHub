@@ -9,6 +9,7 @@ const HACKERRANK_PLATFORM_FOLDER = 'HackerRank';
  *   https://www.hackerrank.com/contests/{contest}/challenges/{slug}
  */
 function getHackerRankProblemSlug() {
+  if (!window.location.hostname.includes('hackerrank.com')) return null;
   const path = window.location.pathname;
   const challengeMatch = path.match(/\/challenges\/([^/]+)/);
   if (challengeMatch) return challengeMatch[1];
@@ -237,6 +238,7 @@ window.listenCodeHubEvents({
 });
 
 function scanHRResult() {
+  if (!window.location.hostname.includes('hackerrank.com')) return false;
   const allElements = document.querySelectorAll('body *');
   for (const el of allElements) {
     const text = (el.innerText || el.textContent || '').trim().toLowerCase();
@@ -266,6 +268,7 @@ const hrPollInterval = setInterval(() => {
     clearInterval(hrPollInterval);
     return;
   }
+  if (!window.location.hostname.includes('hackerrank.com')) return;
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     scanHRResult();
   }
