@@ -163,6 +163,77 @@ function getHackerRankCodeDirect() {
   return null;
 }
 
+function getHackerRankCodeFromCache() {
+  if (!window.location.hostname.includes('hackerrank.com')) return null;
+
+  // Try multiple cross-world bridges
+  let cache = null;
+  try {
+    cache = window.__codehubHrCache;
+  } catch {
+    cache = null;
+  }
+  if (!cache || !cache.responses || cache.responses.length === 0) {
+    // Fallback: try localStorage bridge
+    try {
+      const stored = window.localStorage.getItem('__codehub_hr_cache');
+      if (stored) {
+        cache = JSON.parse(stored);
+      }
+    } catch {
+      cache = null;
+    }
+  }
+  if (!cache || !cache.responses || cache.responses.length === 0) return null;
+
+  const now = Date.now();
+  const recent = cache.responses.filter(r => now - r.timestamp < 120000);
+
+  for (const entry of recent.reverse()) {
+    if (entry.code && entry.code.trim().length > 2) {
+      console.log(`[CodeHub HR] Found code in cache (direct field, url: ${entry.url})`);
+      return entry.code.trim();
+    }
+
+    if (entry.responseText && typeof entry.responseText === 'string') {
+      try {
+        const parsed = JSON.parse(entry.responseText);
+        const codeFields = [
+          parsed?.code,
+          parsed?.result?.code,
+          parsed?.data?.code,
+          parsed?.submission?.code,
+          parsed?.model?.code,
+          parsed?.hackerrank_snippet,
+          parsed?.snippet,
+          parsed?.answer,
+        ];
+        for (const candidate of codeFields) {
+          if (candidate && typeof candidate === 'string' && candidate.trim().length > 2) {
+            console.log(`[CodeHub HR] Found code in cache (JSON field, url: ${entry.url})`);
+            return candidate.trim();
+          }
+        }
+      } catch {
+        // Not JSON, try raw text pattern matching
+      }
+
+      const codeMatch = entry.responseText.match(
+        /(?:public\s+static\s+void\s+main|function\s+\w+|def\s+\w+|class\s+\w+|Scanner\s+sc|import\s+\w+)([\s\S]{0,3000})/i,
+      );
+      if (codeMatch) {
+        const candidate = codeMatch[1].trim();
+        if (candidate.length > 10 && /[a-zA-Z]/.test(candidate)) {
+          console.log(`[CodeHub HR] Found code in cache (regex match, url: ${entry.url})`);
+          return candidate;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Attempts to detect the active language on HackerRank.
  */
@@ -242,6 +313,19 @@ let lastHackerRankUploadKey = '';
 async function handleHackerRankSubmission(detail) {
   console.log(`[CodeHub HackerRank] Submission event received:`, detail);
 
+  // Log cache state for debugging
+  const cacheSize = window.__codehubHrCache?.responses?.length || 0;
+  console.log(`[CodeHub HackerRank] Response cache has ${cacheSize} entries`);
+  if (window.__codehubHrCache?.responses?.length > 0) {
+    const latest = window.__codehubHrCache.responses[window.__codehubHrCache.responses.length - 1];
+    console.log(`[CodeHub HackerRank] Latest cached response URL:`, latest.url);
+    console.log(
+      `[CodeHub HackerRank] Latest cached response has code:`,
+      !!latest.code,
+      latest.code?.length || 0,
+    );
+  }
+
   const problemSlug = detail?.problemSlug || getHackerRankProblemSlug();
   const filenameSuffix = detail?.suffix || null;
   const uploadKey = `${problemSlug}-${detail?.code?.length || 0}-${filenameSuffix || ''}`;
@@ -280,12 +364,19 @@ async function handleHackerRankSubmission(detail) {
   hrShowSpinner();
 
   try {
+    // Priority order for code extraction:
+    // 1. Code from interceptor (captured from submit request body)
+    // 2. Code from interceptor's response cache (parsed from API responses)
+    // 3. Shadow DOM + retry loop (Monaco inside Web Components)
+    // 4. Direct document-level editor search
     let code = detail?.code || null;
+    if (!code) {
+      code = getHackerRankCodeFromCache();
+    }
     if (!code) {
       code = await getHackerRankCodeWithRetry();
     }
     if (!code) {
-      // Last resort: try to read from any available source
       code = getHackerRankCodeDirect();
     }
     if (!code) throw new Error('Could not extract solution code from editor.');

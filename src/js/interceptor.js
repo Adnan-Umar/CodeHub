@@ -190,6 +190,36 @@ function handlePlatformResponse(url, method, requestBody, responseText) {
   };
 
   if (/hackerrank\.com/.test(loweredUrl)) {
+    const hrCache = (window.__codehubHrCache = window.__codehubHrCache || {
+      responses: [],
+      lastUpdated: 0,
+    });
+    hrCache.responses.push({
+      url,
+      method,
+      responseText,
+      requestBody: requestData,
+      code:
+        detail.code ||
+        requestData?.snippet ||
+        requestData?.answer ||
+        requestData?.data?.code ||
+        responseData?.code,
+      status: detail.status,
+      timestamp: Date.now(),
+    });
+    hrCache.lastUpdated = Date.now();
+    if (hrCache.responses.length > 50) {
+      hrCache.responses = hrCache.responses.slice(-30);
+    }
+
+    // Persist to localStorage for cross-world access
+    try {
+      window.localStorage.setItem('__codehub_hr_cache', JSON.stringify(hrCache));
+    } catch {
+      // quota exceeded or unavailable, ignore
+    }
+
     if (isAcceptedDetail(detail, 'hackerrank')) {
       emitCodeHubEvent('hackerRankSubmission', { ...detail, platform: 'HackerRank' });
     }

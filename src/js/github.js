@@ -8,6 +8,13 @@
 
 const CODEHUB_MESSAGE_SOURCE = 'codehub-extension';
 
+window.__codehubCodeCache = window.__codehubCodeCache || {
+  hackerrank: null,
+  gfg: null,
+  codingninjas: null,
+  lastUpdated: 0,
+};
+
 /**
  * Proxies GitHub API requests through the background service worker so
  * uploads work reliably under Manifest V3 host permission rules.
