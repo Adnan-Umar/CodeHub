@@ -87,6 +87,13 @@ function emitCodeHubEvent(eventName, detail) {
   window.dispatchEvent(new CustomEvent(eventName, { detail }));
 }
 
+function getXhrResponseText(xhr) {
+  if (xhr.responseType === '' || xhr.responseType === 'text') {
+    return xhr.responseText || '';
+  }
+  return '';
+}
+
 function extractProblemSlugFromUrl(url, platform) {
   if (!url) return null;
   try {
@@ -125,8 +132,6 @@ function enrichSubmissionDetail(detail, platform) {
 }
 
 function extractSubmissionId(responseData) {
-  if (!responseData) return null;
-
   if (responseData.submission_id != null) {
     return responseData.submission_id;
   }
@@ -293,11 +298,12 @@ XMLHttpRequest.prototype.open = function (method, url, ...args) {
 
 XMLHttpRequest.prototype.send = function (data) {
   this.addEventListener('load', () => {
-    handlePlatformResponse(this._leethub_url, this._leethub_method, data, this.responseText);
+    const responseText = getXhrResponseText(this);
+    handlePlatformResponse(this._leethub_url, this._leethub_method, data, responseText);
 
     if (this._leethub_url?.includes('/problems/') && this._leethub_url?.includes('/submit/')) {
       try {
-        const responseData = tryParseJson(this.responseText);
+        const responseData = tryParseJson(responseText);
         handleLeetCodeSubmitResponse(this._leethub_url, responseData);
       } catch (e) {
         console.log('CodeHub: Error parsing XHR submission response', e);
@@ -307,7 +313,7 @@ XMLHttpRequest.prototype.send = function (data) {
     if (this._leethub_url?.includes('/graphql/') && this._leethub_method === 'POST') {
       try {
         const body = JSON.parse(data || '{}');
-        const responseData = tryParseJson(this.responseText);
+        const responseData = tryParseJson(responseText);
         handleLeetCodeGraphQL(body, responseData);
       } catch (error) {
         console.log('CodeHub: Error parsing XHR GraphQL body:', error);

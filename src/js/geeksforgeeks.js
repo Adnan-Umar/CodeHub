@@ -1,8 +1,6 @@
 /* global leethubPushSolution */
 const GFG_PLATFORM_FOLDER = 'GeeksForGeeks';
 
-const DETECTED_PLATFORM = 'GeeksForGeeks';
-
 function getGFGProblemSlug() {
   const path = window.location.pathname;
   const match = path.match(/\/problems\/([^/]+)/);
@@ -132,7 +130,7 @@ async function handleGFGSubmission(detail) {
   console.log(`[CodeHub GFG] Submission event received:`, detail);
 
   const problemSlug = detail?.problemSlug || getGFGProblemSlug();
-  const platform = detail?.platform || DETECTED_PLATFORM;
+  const platform = detail?.platform || 'GeeksForGeeks';
 
   const statusStr = (
     detail?.status ||

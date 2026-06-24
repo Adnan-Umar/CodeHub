@@ -2,8 +2,6 @@
 
 const CODE360_PLATFORM_FOLDER = 'Code360';
 
-const DETECTED_PLATFORM = 'Code360';
-
 function getCode360ProblemSlug() {
   const path = window.location.pathname;
   const match = path.match(/\/problems\/([^/?#]+)/);
@@ -143,7 +141,7 @@ async function handleCode360Submission(detail) {
   console.log(`[CodeHub Code360] Submission event received:`, detail);
 
   const problemSlug = detail?.problemSlug || getCode360ProblemSlug();
-  const platform = detail?.platform || DETECTED_PLATFORM;
+  const platform = detail?.platform || 'Code360';
 
   const status =
     `${detail?.status || detail?.verdict || detail?.response?.status || ''}`.toLowerCase();

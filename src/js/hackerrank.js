@@ -2,8 +2,6 @@
 
 const HACKERRANK_PLATFORM_FOLDER = 'HackerRank';
 
-const DETECTED_PLATFORM = 'HackerRank';
-
 /**
  * Extracts the problem slug from the current HackerRank URL.
  * URL patterns:
@@ -169,7 +167,7 @@ async function handleHackerRankSubmission(detail) {
   if (uploadKey && uploadKey === lastHackerRankUploadKey) {
     return;
   }
-  const platform = detail?.platform || DETECTED_PLATFORM;
+  const platform = detail?.platform || 'HackerRank';
   const statusStr = (
     detail?.status ||
     detail?.result?.status ||
