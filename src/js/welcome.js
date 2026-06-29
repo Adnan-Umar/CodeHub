@@ -59,7 +59,7 @@ const statusCode = (res, status, name) => {
         document.getElementById('commit_mode').style.display = 'inherit';
       });
       /* Set Repo Hook */
-      chrome.storage.local.set({ leethub_hook: res.full_name }, () => {
+      chrome.storage.local.set({ codehub_hook: res.full_name }, () => {
         console.log('Successfully set new repo hook');
       });
 
@@ -142,8 +142,8 @@ $('#type').change(function () {
 
 /* Load repositories from GitHub */
 function loadRepositories() {
-  chrome.storage.local.get('leethub_token', data => {
-    const token = data.leethub_token;
+  chrome.storage.local.get('codehub_token', data => {
+    const token = data.codehub_token;
 
     let repos = [];
     let page = 1;
@@ -215,7 +215,7 @@ const linkRepo = (token, name) => {
             console.log(`Error linking ${name} to CodeHub`);
           });
           /* Set Repo Hook to NONE */
-          chrome.storage.local.set({ leethub_hook: null }, () => {
+          chrome.storage.local.set({ codehub_hook: null }, () => {
             console.log('Defaulted repo hook to NONE');
           });
 
@@ -235,7 +235,7 @@ const linkRepo = (token, name) => {
           });
           /* Set Repo Hook */
           chrome.storage.local
-            .set({ leethub_hook: res.full_name })
+            .set({ codehub_hook: res.full_name })
             .then(() => {
               console.log('Successfully set new repo hook');
               return chrome.storage.local.get('stats');
@@ -271,7 +271,7 @@ const unlinkRepo = () => {
     console.log(`Unlinking repo`);
   });
   /* Set Repo Hook to NONE */
-  chrome.storage.local.set({ leethub_hook: null }, () => {
+  chrome.storage.local.set({ codehub_hook: null }, () => {
     console.log('Setting repo hook to NONE');
   });
 
@@ -314,8 +314,8 @@ $('#hook_button').on('click', () => {
       - step 3: if (1), POST request to repoName (iff option = create new repo) ; else display error message.
       - step 4: if proceed from 3, hide hook_mode and display commit_mode (show stats e.g: files pushed/questions-solved/leaderboard)
     */
-    chrome.storage.local.get('leethub_token', data => {
-      const token = data.leethub_token;
+    chrome.storage.local.get('codehub_token', data => {
+      const token = data.codehub_token;
       if (token === null || token === undefined) {
         /* Not authorized yet. */
         $('#error').text(
@@ -326,8 +326,8 @@ $('#hook_button').on('click', () => {
       } else if (option() === 'new') {
         createRepo(token, repositoryName());
       } else {
-        chrome.storage.local.get('leethub_username', data2 => {
-          const username = data2.leethub_username;
+        chrome.storage.local.get('codehub_username', data2 => {
+          const username = data2.codehub_username;
           if (!username) {
             /* Improper authorization. */
             $('#error').text(
@@ -353,8 +353,8 @@ $('#unlink a').on('click', () => {
 /* Add sync count behavior */
 $('#sync_counts').on('click', async () => {
   //Check if linked to repo
-  chrome.storage.local.get('leethub_hook', data => {
-    const hook = data.leethub_hook;
+  chrome.storage.local.get('codehub_hook', data => {
+    const hook = data.codehub_hook;
     if (!hook) {
       $('#error').text('No repository linked - Please link a repository to sync counts!');
       $('#error').show();
@@ -373,27 +373,27 @@ $('#sync_counts').on('click', async () => {
   stats.shas = {};
 
   //Get problems solved count from linked repo
-  const repo = await chrome.storage.local.get('leethub_hook').then(({ leethub_hook }) => {
-    if (leethub_hook == null) {
+  const repo = await chrome.storage.local.get('codehub_hook').then(({ codehub_hook }) => {
+    if (codehub_hook == null) {
       $('#error').text('No repository linked - Please link a repository to sync counts!');
       $('#error').show();
       return;
     } else {
       $('#error').hide();
     }
-    return leethub_hook;
+    return codehub_hook;
   });
 
   //Get token from storage
-  const token = await chrome.storage.local.get('leethub_token').then(({ leethub_token }) => {
-    if (leethub_token == null) {
+  const token = await chrome.storage.local.get('codehub_token').then(({ codehub_token }) => {
+    if (codehub_token == null) {
       $('#error').text('No token found - Please authorize CodeHub to access your GitHub account!');
       $('#error').show();
       return;
     } else {
       $('#error').hide();
     }
-    return leethub_token;
+    return codehub_token;
   });
 
   // Fetch repository data using GitHub API
@@ -501,8 +501,8 @@ chrome.storage.local.get('mode_type', data => {
 
   if (mode && mode === 'commit') {
     /* Check if still access to repo */
-    chrome.storage.local.get('leethub_token', data2 => {
-      const token = data2.leethub_token;
+    chrome.storage.local.get('codehub_token', data2 => {
+      const token = data2.codehub_token;
       if (token === null || token === undefined) {
         /* Not authorized yet. */
         $('#error').text(
@@ -515,8 +515,8 @@ chrome.storage.local.get('mode_type', data => {
         document.getElementById('commit_mode').style.display = 'none';
       } else {
         /* Get access to repo */
-        chrome.storage.local.get('leethub_hook', repoName => {
-          const hook = repoName.leethub_hook;
+        chrome.storage.local.get('codehub_hook', repoName => {
+          const hook = repoName.codehub_hook;
           if (!hook) {
             /* Not authorized yet. */
             $('#error').text(

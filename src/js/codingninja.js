@@ -1,4 +1,4 @@
-/* global leethubPushSolution */
+/* global codehubPushSolution */
 
 const CODE360_PLATFORM_FOLDER = 'Code360';
 
@@ -87,12 +87,12 @@ let code360SpinnerElem = null;
 
 function code360ShowSpinner() {
   const style = document.createElement('style');
-  style.textContent = `.leethub-code360-spinner{display:inline-block;width:1.4em;height:1.4em;border:0.3em solid transparent;border-color:#eee;border-top-color:#4F46E5;border-radius:50%;animation:leethub-code360-spin 1s linear infinite;margin-left:8px;vertical-align:middle;} @keyframes leethub-code360-spin{100%{transform:rotate(360deg)}}`;
+  style.textContent = `.codehub-code360-spinner{display:inline-block;width:1.4em;height:1.4em;border:0.3em solid transparent;border-color:#eee;border-top-color:#4F46E5;border-radius:50%;animation:codehub-code360-spin 1s linear infinite;margin-left:8px;vertical-align:middle;} @keyframes codehub-code360-spin{100%{transform:rotate(360deg)}}`;
   document.head.appendChild(style);
 
   code360SpinnerElem = document.createElement('span');
-  code360SpinnerElem.className = 'leethub-code360-spinner';
-  code360SpinnerElem.id = 'leethub-code360-indicator';
+  code360SpinnerElem.className = 'codehub-code360-spinner';
+  code360SpinnerElem.id = 'codehub-code360-indicator';
 
   let target = document.querySelector(
     'button[type="submit"], [data-testid*="submit"], .submit-btn, [class*="submit-button"]',
@@ -172,7 +172,7 @@ async function handleCode360Submission(detail) {
     const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
     console.log(`[CodeHub Code360] Uploading ${problemSlug}...`);
-    await leethubPushSolution({
+    await codehubPushSolution({
       platformFolder: CODE360_PLATFORM_FOLDER,
       problemName: problemSlug,
       difficulty,

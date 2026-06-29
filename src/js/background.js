@@ -21,9 +21,9 @@ const handleMessage = request => {
 
   if (request.closeWebPage) {
     if (request.isSuccess) {
-      chrome.storage.local.set({ leethub_username: request.username });
-      chrome.storage.local.set({ leethub_token: request.token });
-      chrome.storage.local.set({ pipe_leethub: false }, () => {});
+      chrome.storage.local.set({ codehub_username: request.username });
+      chrome.storage.local.set({ codehub_token: request.token });
+      chrome.storage.local.set({ pipe_codehub: false }, () => {});
       closeTab();
       displayWelcomePage();
     } else {

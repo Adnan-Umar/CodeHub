@@ -1,4 +1,4 @@
-/* global leethubPushSolution */
+/* global codehubPushSolution */
 
 const HACKERRANK_PLATFORM_FOLDER = 'HackerRank';
 
@@ -253,12 +253,12 @@ let hrSpinnerElem = null;
 
 function hrShowSpinner() {
   const style = document.createElement('style');
-  style.textContent = `.leethub-hr-spinner { display:inline-block;width:1.4em;height:1.4em;border:0.3em solid transparent;border-color:#eee;border-top-color:#3E67EC;border-radius:50%;animation:leethub-spin 1s linear infinite;margin-left:8px;vertical-align:middle;} @keyframes leethub-spin{100%{transform:rotate(360deg)}}`;
+  style.textContent = `.codehub-hr-spinner { display:inline-block;width:1.4em;height:1.4em;border:0.3em solid transparent;border-color:#eee;border-top-color:#3E67EC;border-radius:50%;animation:codehub-spin 1s linear infinite;margin-left:8px;vertical-align:middle;} @keyframes codehub-spin{100%{transform:rotate(360deg)}}`;
   document.head.appendChild(style);
 
   hrSpinnerElem = document.createElement('span');
-  hrSpinnerElem.className = 'leethub-hr-spinner';
-  hrSpinnerElem.id = 'leethub-hr-indicator';
+  hrSpinnerElem.className = 'codehub-hr-spinner';
+  hrSpinnerElem.id = 'codehub-hr-indicator';
 
   // Inject next to submit button (try multiple selectors for HackerRank UI variants)
   let submitBtn = document.querySelector(
@@ -389,7 +389,7 @@ async function handleHackerRankSubmission(detail) {
     const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
     console.log(`[CodeHub HackerRank] Uploading ${problemSlug}...`);
-    await leethubPushSolution({
+    await codehubPushSolution({
       platformFolder: HACKERRANK_PLATFORM_FOLDER,
       problemName: problemSlug,
       difficulty,
@@ -412,7 +412,7 @@ async function handleHackerRankSubmission(detail) {
 // Listen for events from the MAIN-world interceptor via postMessage bridge
 window.listenCodeHubEvents({
   hackerRankSubmission: detail => handleHackerRankSubmission(detail),
-  leetHubHackerRankSubmission: detail => handleHackerRankSubmission(detail),
+  codehubHackerRankSubmission: detail => handleHackerRankSubmission(detail),
 });
 
 function scanHRResult() {

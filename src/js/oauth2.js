@@ -10,7 +10,7 @@ const oAuth2 = (() => {
       const scopeParam = encodeURIComponent(SCOPES.join(' '));
       const url = `${AUTHORIZATION_URL}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URL}&scope=${scopeParam}`;
 
-      chrome.storage.local.set({ pipe_leethub: true }, () => {
+      chrome.storage.local.set({ pipe_codehub: true }, () => {
         chrome.tabs.create({ url, active: true }, () => {});
       });
     },

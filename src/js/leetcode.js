@@ -161,9 +161,9 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
     return;
   }
 
-  const { leethub_token, leethub_hook, stats } = await chrome.storage.local.get([
-    'leethub_token',
-    'leethub_hook',
+  const { codehub_token, codehub_hook, stats } = await chrome.storage.local.get([
+    'codehub_token',
+    'codehub_hook',
     'stats',
   ]);
 
@@ -172,8 +172,8 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
 
   try {
     const { content, sha } = await getUpdatedData(
-      leethub_token,
-      leethub_hook,
+      codehub_token,
+      codehub_hook,
       '',
       readmeFilename,
       false,
@@ -186,8 +186,8 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
     if (err.message === '404') {
       const initialContent = btoa(unescape(encodeURIComponent(defaultRepoReadme)));
       const uploadResponse = await upload(
-        leethub_token,
-        leethub_hook,
+        codehub_token,
+        codehub_hook,
         initialContent,
         '',
         readmeFilename,
@@ -208,7 +208,7 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
   }
 
   for (const topic of topicTags) {
-    readme = await appendProblemToReadme(topic.name, readme, leethub_hook, problemName);
+    readme = await appendProblemToReadme(topic.name, readme, codehub_hook, problemName);
   }
 
   readme = sortTopicsInReadme(readme);
@@ -216,8 +216,8 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
   const encodedReadme = btoa(unescape(encodeURIComponent(readme)));
   try {
     return await upload(
-      leethub_token,
-      leethub_hook,
+      codehub_token,
+      codehub_hook,
       encodedReadme,
       '',
       readmeFilename,
@@ -231,15 +231,15 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
       // Handle 409 Conflict by fetching the latest SHA and retrying
       console.log(`Conflict detected for ${readmeFilename}. Fetching latest SHA...`);
       const { sha: latestSha } = await getUpdatedData(
-        leethub_token,
-        leethub_hook,
+        codehub_token,
+        codehub_hook,
         '',
         readmeFilename,
         false,
       );
       return upload(
-        leethub_token,
-        leethub_hook,
+        codehub_token,
+        codehub_hook,
         encodedReadme,
         '',
         readmeFilename,
@@ -418,24 +418,24 @@ function uploadGit(
   let useLanguageFolder = false;
 
   return chrome.storage.local
-    .get('leethub_token')
-    .then(({ leethub_token }) => {
-      token = leethub_token;
-      if (leethub_token == undefined) {
-        throw new Error('leethub token is undefined');
+    .get('codehub_token')
+    .then(({ codehub_token }) => {
+      token = codehub_token;
+      if (codehub_token == undefined) {
+        throw new Error('codehub token is undefined');
       }
       return chrome.storage.local.get('mode_type');
     })
     .then(({ mode_type }) => {
       if (mode_type !== 'commit') {
-        throw new Error('leethub mode is not commit');
+        throw new Error('codehub mode is not commit');
       }
-      return chrome.storage.local.get('leethub_hook');
+      return chrome.storage.local.get('codehub_hook');
     })
-    .then(({ leethub_hook }) => {
-      hook = leethub_hook;
+    .then(({ codehub_hook }) => {
+      hook = codehub_hook;
       if (!hook) {
-        throw new Error('leethub hook not defined');
+        throw new Error('codehub hook not defined');
       }
       return chrome.storage.local.get('useDifficultyFolder');
     })
@@ -688,8 +688,8 @@ document.addEventListener('click', event => {
 });
 
 function LeetCodeV1() {
-  this.progressSpinnerElementId = 'leethub_progress_elem';
-  this.progressSpinnerElementClass = 'leethub_progress';
+  this.progressSpinnerElementId = 'codehub_progress_elem';
+  this.progressSpinnerElementClass = 'codehub_progress';
   this.injectSpinnerStyle();
 }
 LeetCodeV1.prototype.init = async function () {};
@@ -953,10 +953,10 @@ LeetCodeV1.prototype.parseQuestion = function () {
 /* Injects a spinner on left side to the "Run Code" button */
 LeetCodeV1.prototype.startSpinner = function () {
   try {
-    let elem = document.getElementById('leethub_progress_anchor_element');
+    let elem = document.getElementById('codehub_progress_anchor_element');
     if (!elem) {
       elem = document.createElement('span');
-      elem.id = 'leethub_progress_anchor_element';
+      elem.id = 'codehub_progress_anchor_element';
       elem.style = 'margin-right: 20px;padding-top: 2px;';
     }
     elem.innerHTML = `<div id="${this.progressSpinnerElementId}" class="${this.progressSpinnerElementClass}"></div>`;
@@ -1021,11 +1021,11 @@ LeetCodeV1.prototype.markUploadFailed = function () {
 LeetCodeV2.prototype.injectAndListen = function () {
   const self = this;
   window.listenCodeHubEvents({
-    leetHubSubmissionId: detail => {
+    codehubSubmissionId: detail => {
       console.log('[CodeHub] Received submission ID:', detail.submissionId);
       self.processSubmission(detail.submissionId);
     },
-    leetHubSolutionPost: detail => {
+    codehubSolutionPost: detail => {
       const { questionSlug, content, title } = detail;
       console.log('CodeHub: Received solution post event:', detail);
       self.handleSolutionPost(questionSlug, content, title);
@@ -1038,7 +1038,7 @@ LeetCodeV2.prototype.injectAndListen = function () {
  */
 LeetCodeV2.prototype.processSubmission = async function (submissionId) {
   // Set the submissionId as a global variable so the existing init function can use it.
-  window.leethubLastSubmissionId = submissionId;
+  window.codehubLastSubmissionId = submissionId;
 
   // Directly call the loader from the existing code.
   loader(this);
@@ -1046,14 +1046,14 @@ LeetCodeV2.prototype.processSubmission = async function (submissionId) {
 
 function LeetCodeV2() {
   this.submissionData;
-  this.progressSpinnerElementId = 'leethub_progress_elem';
-  this.progressSpinnerElementClass = 'leethub_progress';
+  this.progressSpinnerElementId = 'codehub_progress_elem';
+  this.progressSpinnerElementClass = 'codehub_progress';
   this.injectSpinnerStyle();
   this.addManualSubmitButton();
   this.injectAndListen();
 }
 LeetCodeV2.prototype.init = async function () {
-  const submissionId = window.leethubLastSubmissionId;
+  const submissionId = window.codehubLastSubmissionId;
   if (!submissionId) {
     alert('Could not find a recent submission ID. Please try submitting again.');
     return;
@@ -1151,7 +1151,7 @@ query submissionDetails($submissionId: ID!) {
 };
 
 LeetCodeV2.prototype.checkSubmissionStatus = async function () {
-  const submissionId = window.leethubLastSubmissionId;
+  const submissionId = window.codehubLastSubmissionId;
   if (!submissionId) {
     return { complete: false, success: false };
   }
@@ -1385,10 +1385,10 @@ LeetCodeV2.prototype.parseDifficulty = function () {
   return 'unknown';
 };
 LeetCodeV2.prototype.startSpinner = function () {
-  let elem = document.getElementById('leethub_progress_anchor_element');
+  let elem = document.getElementById('codehub_progress_anchor_element');
   if (!elem) {
     elem = document.createElement('span');
-    elem.id = 'leethub_progress_anchor_element';
+    elem.id = 'codehub_progress_anchor_element';
     elem.style = 'margin-right: 20px;padding-top: 2px;';
   }
   elem.innerHTML = `<div id="${this.progressSpinnerElementId}" class="${this.progressSpinnerElementClass}"></div>`;
@@ -1493,11 +1493,11 @@ LeetCodeV2.prototype.addUrlChangeListener = function () {
 /* Sync to local storage */
 chrome.storage.local.get('isSync', data => {
   const keys = [
-    'leethub_token',
-    'leethub_username',
-    'pipe_leethub',
+    'codehub_token',
+    'codehub_username',
+    'pipe_codehub',
     'stats',
-    'leethub_hook',
+    'codehub_hook',
     'mode_type',
     'custom_commit_message',
   ];
@@ -1928,12 +1928,12 @@ async function questionSlugToProblemName(questionSlug) {
 async function getLastCommitMessage(problemName) {
   try {
     const { stats } = await chrome.storage.local.get('stats');
-    const { leethub_token } = await chrome.storage.local.get('leethub_token');
-    const { leethub_hook } = await chrome.storage.local.get('leethub_hook');
+    const { codehub_token } = await chrome.storage.local.get('codehub_token');
+    const { codehub_hook } = await chrome.storage.local.get('codehub_hook');
     const { useDifficultyFolder = false } = await chrome.storage.local.get('useDifficultyFolder');
     const { useLanguageFolder = false } = await chrome.storage.local.get('useLanguageFolder');
 
-    if (!stats?.shas || !leethub_token || !leethub_hook) {
+    if (!stats?.shas || !codehub_token || !codehub_hook) {
       return 'Add solution post - CodeHub';
     }
 
@@ -1971,12 +1971,12 @@ async function getLastCommitMessage(problemName) {
     }
 
     // Fetch commits from GitHub API for this problem folder
-    const commitsUrl = `https://api.github.com/repos/${leethub_hook}/commits?path=${folderPath}&per_page=10`;
+    const commitsUrl = `https://api.github.com/repos/${codehub_hook}/commits?path=${folderPath}&per_page=10`;
 
     const options = {
       method: 'GET',
       headers: {
-        Authorization: `token ${leethub_token}`,
+        Authorization: `token ${codehub_token}`,
         Accept: 'application/vnd.github.v3+json',
       },
     };

@@ -1,4 +1,4 @@
-/* global leethubPushSolution */
+/* global codehubPushSolution */
 const GFG_PLATFORM_FOLDER = 'GeeksForGeeks';
 
 function getGFGProblemSlug() {
@@ -107,12 +107,12 @@ let gfgSpinnerElem = null;
 
 function gfgShowSpinner() {
   const style = document.createElement('style');
-  style.textContent = `.leethub-gfg-spinner{display:inline-block;width:1.4em;height:1.4em;border:0.3em solid transparent;border-color:#eee;border-top-color:#2F8D46;border-radius:50%;animation:leethub-gfg-spin 1s linear infinite;margin-left:8px;vertical-align:middle;} @keyframes leethub-gfg-spin{100%{transform:rotate(360deg)}}`;
+  style.textContent = `.codehub-gfg-spinner{display:inline-block;width:1.4em;height:1.4em;border:0.3em solid transparent;border-color:#eee;border-top-color:#2F8D46;border-radius:50%;animation:codehub-gfg-spin 1s linear infinite;margin-left:8px;vertical-align:middle;} @keyframes codehub-gfg-spin{100%{transform:rotate(360deg)}}`;
   document.head.appendChild(style);
 
   gfgSpinnerElem = document.createElement('span');
-  gfgSpinnerElem.className = 'leethub-gfg-spinner';
-  gfgSpinnerElem.id = 'leethub-gfg-indicator';
+  gfgSpinnerElem.className = 'codehub-gfg-spinner';
+  gfgSpinnerElem.id = 'codehub-gfg-indicator';
 
   let submitBtn = document.querySelector(
     'button[class*="submit"], button[id*="submit"], .submit_btn button, [data-testid*="submit"]',
@@ -198,7 +198,7 @@ async function handleGFGSubmission(detail) {
     const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
 
     console.log(`[CodeHub GFG] Uploading ${problemSlug}...`);
-    await leethubPushSolution({
+    await codehubPushSolution({
       platformFolder: GFG_PLATFORM_FOLDER,
       problemName: problemSlug,
       difficulty,
@@ -218,7 +218,7 @@ async function handleGFGSubmission(detail) {
 
 window.listenCodeHubEvents({
   gfgSubmission: detail => handleGFGSubmission(detail),
-  leetHubGFGSubmission: detail => handleGFGSubmission(detail),
+  codehubGFGSubmission: detail => handleGFGSubmission(detail),
 });
 
 function scanGFGResult() {

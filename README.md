@@ -153,7 +153,7 @@ CodeHub solves this by:
 ## Project Structure
 
 ```
-LeetHub/
+codehub/
 ├── assets/
 │   ├── extension/            # Browser extension screenshots (1.png – 4.png)
 │   ├── logo.png              # Extension logo
@@ -215,7 +215,7 @@ LeetHub/
 │  github.js                    handleCode360Submission()             │
 │  ─── ensureGitDirectory()         │                                 │
 │  ─── githubUpload() /            ▼                                 │
-│      codehubGithubFetch()   leethubPushSolution()                  │
+│      codehubGithubFetch()   codehubPushSolution()                  │
 │       │                       │                                   │
 │       ▼                       ▼                                   │
 │  background.js (proxy)    background.js (proxy)                    │
@@ -248,9 +248,9 @@ CodeHub uses Chrome Manifest, which enforces a strict separation between:
 ### GitHub Upload Pipeline
 
 ```
-leethubPushSolution (github.js)
+codehubPushSolution (github.js)
   │
-  ├─ chrome.storage.local.get('leethub_token', 'mode_type', 'leethub_hook', ...)
+  ├─ chrome.storage.local.get('codehub_token', 'mode_type', 'codehub_hook', ...)
   │
   ├─ ensureGitDirectory() ──► GitHub API PUT .gitkeep (creates folder)
   │
@@ -350,7 +350,7 @@ const CLIENT_SECRET = 'YOUR_CLIENT_SECRET_HERE';
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Toggle **Developer mode** ON (top-right corner)
 3. Click **Load unpacked**
-4. Select the `LeetHub` project folder
+4. Select the `codehub` project folder
 5. The CodeHub icon should appear in your Chrome toolbar
 
 ---
@@ -464,13 +464,13 @@ node scripts/test-core-logic.mjs
 - **ESLint** flat config (`eslint.config.js`) with `@eslint/js` recommended + Prettier plugin
 - **Prettier**: single quotes, semicolons, 100 char print width, trailing commas
 - **No framework** — pure vanilla JS, jQuery (vendored), Semantic UI (vendored)
-- **Platform scripts** share globals from `github.js` (e.g. `window.leethubPushSolution`, `window.listenCodeHubEvents`)
+- **Platform scripts** share globals from `github.js` (e.g. `window.codehubPushSolution`, `window.listenCodeHubEvents`)
 
 ### Key Implementation Notes
 
 1. **Content script order matters.** `interceptor.js` runs at `document_start` (before any page JS loads), followed by all platform scripts at `document_idle`.
 2. **Cross-world communication.** The interceptor runs in the MAIN world; platform scripts run in the isolated world. They communicate via `window.postMessage` + `CustomEvent`.
-3. **Service worker ephemerality.** MV3 service workers can be killed by the browser at any time. `leethubPushSolution` uses a `_inProgress` Set and a 30-second timeout with direct `fetch` fallback to handle this.
+3. **Service worker ephemerality.** MV3 service workers can be killed by the browser at any time. `codehubPushSolution` uses a `_inProgress` Set and a 30-second timeout with direct `fetch` fallback to handle this.
 4. **Shadow DOM piercing.** HackerRank and GFG use Web Components with shadow DOMs. Code extraction recurses up to depth 5 into `shadowRoot` trees to find Monaco/Ace/CodeMirror instances.
 5. **XHR responseType guard.** Some platforms set `xhr.responseType = 'blob'`, which makes `xhr.responseText` inaccessible. The interceptor guards against this.
 

@@ -124,7 +124,7 @@ function listenCodeHubEvents(eventHandlers) {
 }
 
 /* Map of language display names to file extensions (superset for all platforms) */
-const LEETHUB_LANGUAGES = {
+const codehub_LANGUAGES = {
   C: '.c',
   'C++': '.cpp',
   'C#': '.cs',
@@ -315,8 +315,8 @@ async function ensureGitDirectory(token, hook, platformFolder, difficulty = '') 
   }
 }
 
-window.LEETHUB_LANGUAGES = LEETHUB_LANGUAGES;
-window.leethubPushSolution = leethubPushSolution;
+window.codehub_LANGUAGES = codehub_LANGUAGES;
+window.codehubPushSolution = codehubPushSolution;
 window.ensureGitDirectory = ensureGitDirectory;
 window.codehubGithubFetch = codehubGithubFetch;
 window.codehubGithubJson = codehubGithubJson;
@@ -367,7 +367,7 @@ async function githubGetFile(
 
 /**
  * High-level function to push a solution file (and optionally a README) to GitHub.
- * Reads leethub_token, leethub_hook, useDifficultyFolder from chrome.storage.local.
+ * Reads codehub_token, codehub_hook, useDifficultyFolder from chrome.storage.local.
  *
  * @param {object} params
  * @param {string} params.platformFolder - "LeetCode" | "HackerRank" | "GeeksForGeeks" | "Code360"
@@ -379,7 +379,7 @@ async function githubGetFile(
  * @param {string|null} [params.readmeContent] - HTML/markdown problem statement (or null to skip)
  * @param {string|null} [params.filenameSuffix] - optional filename suffix (e.g. "-bfs")
  */
-async function leethubPushSolution({
+async function codehubPushSolution({
   platformFolder,
   problemName,
   difficulty,
@@ -389,18 +389,18 @@ async function leethubPushSolution({
   readmeContent = null,
   filenameSuffix = null,
 }) {
-  const { leethub_token } = await chrome.storage.local.get('leethub_token');
-  if (!leethub_token) throw new Error('[CodeHub] No GitHub token configured.');
+  const { codehub_token } = await chrome.storage.local.get('codehub_token');
+  if (!codehub_token) throw new Error('[CodeHub] No GitHub token configured.');
 
   const { mode_type } = await chrome.storage.local.get('mode_type');
   if (mode_type !== 'commit') throw new Error('[CodeHub] Extension not in commit mode.');
 
-  const { leethub_hook } = await chrome.storage.local.get('leethub_hook');
-  if (!leethub_hook) throw new Error('[CodeHub] No GitHub repo configured.');
+  const { codehub_hook } = await chrome.storage.local.get('codehub_hook');
+  if (!codehub_hook) throw new Error('[CodeHub] No GitHub repo configured.');
 
   const { useDifficultyFolder = false } = await chrome.storage.local.get('useDifficultyFolder');
 
-  const ext = LEETHUB_LANGUAGES[language] || '.txt';
+  const ext = codehub_LANGUAGES[language] || '.txt';
   const baseFilename = filenameSuffix
     ? `${problemName}${filenameSuffix}${ext}`
     : `${problemName}${ext}`;
@@ -411,20 +411,20 @@ async function leethubPushSolution({
   const existingSha = safeStats.shas?.[storageKey]?.[baseFilename] ?? null;
 
   // Guard: prevent duplicate concurrent uploads for the same problem
-  if (leethubPushSolution._inProgress?.has(storageKey)) {
+  if (codehubPushSolution._inProgress?.has(storageKey)) {
     console.log(`[CodeHub] Already uploading ${storageKey}, skipping duplicate.`);
     return;
   }
-  leethubPushSolution._inProgress = leethubPushSolution._inProgress || new Set();
-  leethubPushSolution._inProgress.add(storageKey);
+  codehubPushSolution._inProgress = codehubPushSolution._inProgress || new Set();
+  codehubPushSolution._inProgress.add(storageKey);
 
   try {
     const encodedCode = btoa(unescape(encodeURIComponent(code)));
 
     // Ensure the platform (and optional difficulty) directory exists on GitHub
     await ensureGitDirectory(
-      leethub_token,
-      leethub_hook,
+      codehub_token,
+      codehub_hook,
       platformFolder,
       useDifficultyFolder ? difficulty : '',
     );
@@ -433,8 +433,8 @@ async function leethubPushSolution({
     async function uploadWithRetry(sha) {
       try {
         return await githubUpload(
-          leethub_token,
-          leethub_hook,
+          codehub_token,
+          codehub_hook,
           encodedCode,
           platformFolder,
           difficulty,
@@ -447,8 +447,8 @@ async function leethubPushSolution({
       } catch (err) {
         if (err.message === '409') {
           const latest = await githubGetFile(
-            leethub_token,
-            leethub_hook,
+            codehub_token,
+            codehub_hook,
             platformFolder,
             difficulty,
             problemName,
@@ -456,8 +456,8 @@ async function leethubPushSolution({
             useDifficultyFolder,
           );
           return githubUpload(
-            leethub_token,
-            leethub_hook,
+            codehub_token,
+            codehub_hook,
             encodedCode,
             platformFolder,
             difficulty,
@@ -479,8 +479,8 @@ async function leethubPushSolution({
       const encodedReadme = btoa(unescape(encodeURIComponent(readmeContent)));
       uploads.push(
         githubUpload(
-          leethub_token,
-          leethub_hook,
+          codehub_token,
+          codehub_hook,
           encodedReadme,
           platformFolder,
           difficulty,
@@ -498,6 +498,6 @@ async function leethubPushSolution({
     console.error(`[CodeHub] Upload failed for ${storageKey}:`, err.message || err);
     throw err;
   } finally {
-    leethubPushSolution._inProgress?.delete(storageKey);
+    codehubPushSolution._inProgress?.delete(storageKey);
   }
 }
