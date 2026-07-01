@@ -96,9 +96,14 @@ CodeHub solves this by:
 | --------------------------- | --------------------------------------------- | ---------------- | -------------------------- | ----------------------------------- |
 | **LeetCode.com**            | `leetcode.com/problems/{slug}`                | `LeetCode/`      | Yes (Easy / Medium / Hard) | Supports legacy + dynamic UI        |
 | **LeetCode.cn**             | `leetcode.cn/problems/{slug}`                 | `LeetCode/`      | Yes                        | Chinese mirror                      |
-| **HackerRank**              | `hackerrank.com/challenges/{slug}`            | `HackerRank/`    | No                         | Manual push button in toolbar       |
-| **GeeksForGeeks**           | `geeksforgeeks.org/problems/{slug}`           | `GeeksForGeeks/` | Yes (Easy / Medium / Hard) | MutationObserver + API interception |
-| **Coding Ninjas / Code360** | `codingninjas.com/codestudio/problems/{slug}` | `Code360/`       | No                         | Manual push button in toolbar       |
+| **HackerRank**              | `hackerrank.com/challenges/{slug}`            | `HackerRank/`    | Yes (Easy / Medium / Hard) | Manual push button in toolbar       |
+| **GeeksForGeeks**           | `geeksforgeeks.org/problems/{slug}`           | `GeeksForGeeks/` | Yes (Easy / Medium / Hard) | Manual push button + API interception |
+| **Coding Ninjas / Code360** | `codingninjas.com/codestudio/problems/{slug}` | `Code360/`       | Yes (Easy / Medium / Hard) | Manual push button in toolbar       |
+
+> **Feature parity:** HackerRank, GeeksForGeeks, and Code360 share the same
+> upload pipeline as LeetCode — stats counters, custom commit messages,
+> difficulty/language subfolders, timestamped filenames, and per-problem
+> READMEs. See [Shared Features](#shared-features) below.
 
 ---
 
@@ -133,14 +138,34 @@ CodeHub solves this by:
 #### GeeksForGeeks
 
 - **Detection** — Interceptor evaluates all GFG domain responses for accepted verdicts.
-- **Editor extraction** — Shadow DOM recursive search, Monaco → CodeMirror → Ace → textarea fallback chain.
+- **Editor extraction** — Shadow DOM recursive search, Monaco → CodeMirror → Ace → textarea fallback chain, with retry loop (`getGFGCodeWithRetry`) for slow-loading editors.
+- **Manual Push button** — injected next to the Submit button; right-click for file suffix.
 - **Polling** — 2-second interval for 30 cycles scanning leaf text nodes for "Accepted" / "Congratulations".
+- **Difficulty detection** — Scraped from the problem header into Easy / Medium / Hard.
 
 #### Code360 (Coding Ninjas)
 
 - **Detection** — Interceptor captures all `codingninjas.com` and `naukri.com/code360` responses.
-- **Editor extraction** — Monaco `getModels()` / `getEditors()`, CodeMirror, textarea fallbacks.
+- **Editor extraction** — Monaco `getModels()` / `getEditors()`, CodeMirror, textarea fallbacks, with retry loop (`getCode360CodeWithRetry`).
+- **Manual Push button** — injected next to the Submit button; right-click for file suffix.
 - **Polling** — same pattern as GFG.
+- **Difficulty detection** — Best-effort scan of the problem page text.
+
+### Shared Features
+
+All four platforms (LeetCode, HackerRank, GeeksForGeeks, Code360) now share the
+same upload pipeline (`codehubPushSolution` in `src/js/github.js`), so they all
+support the following options configured from the extension popup:
+
+| Feature                     | Toggled by                  | Effect                                                                                  |
+| --------------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
+| Difficulty subfolder        | *Use Difficulty Subfolder*  | Files land in `{Platform}/{Difficulty}/{problem}/{file}`                                |
+| Language subfolder          | *Use Language Subfolder*    | Files land in `{Platform}/{Language}/{Difficulty}/{problem}/{file}`                     |
+| Timestamped filenames       | *Enable Timestamped Filenames* | Saves versions as `{problem}_{MM-DD-YYYY}_{hh-mm-ss}{ext}`                           |
+| Custom commit message       | *Customize Commit Message*  | Template with `{time}`, `{space}`, `{language}`, `{problemName}`, `{difficulty}`, `{date}`, `{problemTopic}` |
+| Solved / difficulty counters| (always on)                 | Increments the popup stats on every newly accepted problem                              |
+| Per-problem README          | (always on)                 | `README.md` with title, difficulty, URL, and platform badge                             |
+| Manual Push button          | (always on)                 | Toolbar button + right-click suffix on every platform                                   |
 
 ### Quality-of-Life
 

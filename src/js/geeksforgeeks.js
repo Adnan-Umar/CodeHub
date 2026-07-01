@@ -82,6 +82,31 @@ function getGFGCode() {
   return null;
 }
 
+/**
+ * Retries code extraction multiple times with a delay, mirroring HackerRank's
+ * approach. GFG's Monaco editor may not be ready immediately after submission.
+ *
+ * NOTE: Content scripts run in the isolated world, so `window.monaco` / the
+ * `root.monaco` checks inside getGFGCode() are mostly no-ops here. The shared
+ * DOM scraper (codehubExtractCodeFromDom) is therefore tried first because it
+ * reads the rendered lines directly and works reliably cross-world.
+ */
+async function getGFGCodeWithRetry(attempts = 8, delayMs = 400) {
+  for (let i = 0; i < attempts; i++) {
+    // 1. World-agnostic DOM scraper (works from isolated content-script world)
+    let code = window.codehubExtractCodeFromDom?.(document) || null;
+    // 2. Legacy multi-strategy search (Monaco/Ace via page globals + shadow DOM)
+    if (!code) code = getGFGCode();
+    if (code && code.trim().length > 2) {
+      return code;
+    }
+    if (i < attempts - 1) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  return null;
+}
+
 function getGFGLanguage() {
   const langSelector = document.querySelector(
     '.selected-lang, .problems_header_content__title__lang, #langDD .active, [class*="lang"] option:checked',
@@ -101,6 +126,40 @@ function getGFGDifficulty() {
     if (text.toLowerCase().includes('hard')) return 'Hard';
   }
   return '';
+}
+
+/**
+ * Scrapes runtime / memory from the GFG submission results so they can feed
+ * the shared commit-message template (mirrors LeetCode's behaviour).
+ */
+function getGFGSubmissionStats() {
+  const stats = { time: '', space: '' };
+  try {
+    const allElements = document.querySelectorAll(
+      '[class*="time"], [class*="memory"], .problem_status, [class*="result"]',
+    );
+    for (const el of allElements) {
+      const text = (el.innerText || '').toLowerCase();
+      if (!stats.time && (text.includes('time') || text.includes('sec'))) {
+        stats.time = (el.innerText || '').trim();
+      }
+      if (!stats.space && (text.includes('memory') || text.includes('space'))) {
+        stats.space = (el.innerText || '').trim();
+      }
+      if (stats.time && stats.space) break;
+    }
+  } catch {
+    // selectors are best-effort
+  }
+  return stats;
+}
+
+/**
+ * Returns the problem title (used for the README header), preferring the GFG
+ * page title with the trailing " | GeeksforGeeks" stripped.
+ */
+function getGFGProblemTitle() {
+  return document.title?.split('|')[0]?.trim() || '';
 }
 
 let gfgSpinnerElem = null;
@@ -160,7 +219,6 @@ async function handleGFGSubmission(detail) {
   console.log(`[CodeHub GFG] Submission event received:`, detail);
 
   const problemSlug = detail?.problemSlug || getGFGProblemSlug();
-  const platform = detail?.platform || 'GeeksForGeeks';
 
   const statusStr = (
     detail?.status ||
@@ -186,16 +244,17 @@ async function handleGFGSubmission(detail) {
   gfgShowSpinner();
 
   try {
-    const code = detail?.code || getGFGCode();
+    const code = detail?.code || (await getGFGCodeWithRetry());
     if (!code) throw new Error('Could not extract solution code from editor.');
 
     const language = detail?.language || getGFGLanguage() || 'text';
     const difficulty = detail?.difficulty || getGFGDifficulty() || '';
+    const { time, space } = getGFGSubmissionStats();
+    const title = getGFGProblemTitle() || problemSlug;
 
     const problemUrl = window.location.href.split('?')[0];
-    const title = document.title?.split('|')[0]?.trim() || problemSlug;
-    const readmeContent = `## [${title}](${problemUrl})\n\n**Difficulty**: ${difficulty || 'N/A'}  \n*Platform: GeeksForGeeks*\n`;
-    const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
+    const difficultyLine = difficulty ? `\n**Difficulty**: ${difficulty}` : '';
+    const readmeContent = `## [${title}](${problemUrl})${difficultyLine}\n\n*Platform: GeeksForGeeks*\n`;
 
     console.log(`[CodeHub GFG] Uploading ${problemSlug}...`);
     await codehubPushSolution({
@@ -204,8 +263,10 @@ async function handleGFGSubmission(detail) {
       difficulty,
       code,
       language,
-      commitMsg,
       readmeContent,
+      filenameSuffix: detail?.suffix || null,
+      time,
+      space,
     });
 
     gfgMarkSuccess();
@@ -271,3 +332,75 @@ setTimeout(() => {
 }, 1500);
 
 console.log('[CodeHub] GeeksForGeeks content script loaded.');
+
+// ====== Manual Push Button (GeeksForGeeks) ======
+
+function gfgGetGitIcon() {
+  const gitSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  gitSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  gitSvg.setAttribute('width', '18');
+  gitSvg.setAttribute('height', '18');
+  gitSvg.setAttribute('viewBox', '0 0 114.8625 114.8625');
+  const gitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  gitPath.setAttribute('fill', '#100f0d');
+  gitPath.setAttribute(
+    'd',
+    'm112.693375 52.3185-50.149-50.146875c-2.886625-2.88875-7.57075-2.88875-10.461375 0l-10.412625 10.4145 13.2095 13.2095C57.94975 24.759 61.47025 25.45475 63.9165 27.9015c2.461 2.462 3.150875 6.01275 2.087375 9.09375l12.732 12.7305c3.081-1.062 6.63325-.3755 9.09425 2.088875 3.4375 3.4365 3.4375 9.007375 0 12.44675-3.44 3.4395-9.00975 3.4395-12.45125 0-2.585375-2.587875-3.225125-6.387125-1.914-9.57275l-11.875-11.874V74.06075c.837375.415 1.628375.96775 2.326625 1.664 3.4375 3.437125 3.4375 9.007375 0 12.44975-3.4375 3.436-9.01125 3.436-12.44625 0-3.4375-3.442375-3.4375-9.012625 0-12.44975.849625-.848625 1.8335-1.490625 2.88325-1.920375V42.26925c-1.04975-.42975-2.03125-1.066375-2.88325-1.920875-2.6035-2.602625-3.23-6.424375-1.894625-9.622125L36.55325 17.701875 2.1660125 52.086125c-2.88818 2.891125-2.88818 7.57525 0 10.463875l50.1513625 50.146975c2.88725 2.88818125 7.569875 2.88818125 10.461375 0l49.914625-49.9146c2.889625-2.889125 2.889625-7.575625 0-10.463875',
+  );
+  gitSvg.appendChild(gitPath);
+  return gitSvg;
+}
+
+function gfgAddManualPushButton() {
+  const host = window.location.hostname;
+  if (!host.includes('geeksforgeeks.org') && !host.includes('geeksforgeeks.com')) return;
+  if (document.getElementById('gfgManualGitSubmit')) return;
+
+  const submitBtn = document.querySelector(
+    'button[class*="submit"], button[id*="submit"], .submit_btn button, [data-testid*="submit"], button[class*="run"]',
+  );
+  if (!submitBtn) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'gfgManualGitSubmit';
+  btn.className =
+    'gfg-sc g-btn px-3 py-2 rounded font-medium text-sm flex items-center gap-1 bg-green-600 text-white hover:bg-green-700';
+  btn.textContent = 'Push ';
+  btn.appendChild(gfgGetGitIcon());
+  btn.insertAdjacentText('beforeend', ' to GitHub');
+  btn.style.cssText = 'cursor:pointer; font-size:13px; margin-left:8px;';
+  btn.title = 'Push current solution to GitHub (right-click to add suffix)';
+
+  btn.addEventListener('click', () => {
+    gfgShowSpinner();
+    handleGFGSubmission({ status: 'Accepted' });
+  });
+
+  btn.addEventListener('contextmenu', event => {
+    event.preventDefault();
+    const suffix = prompt(
+      'Add a suffix for this solution file, i.e., -bfs, -dfs. \r\nWe don\'t recommend special characters except "-".',
+    );
+    if (suffix && suffix.trim()) {
+      gfgShowSpinner();
+      handleGFGSubmission({ status: 'Accepted', suffix: suffix.trim() });
+    }
+  });
+
+  if (submitBtn.parentElement) {
+    submitBtn.parentElement.insertBefore(btn, submitBtn);
+  }
+}
+
+// Inject manual push button after editor is ready
+setTimeout(() => {
+  const host = window.location.hostname;
+  if (!host.includes('geeksforgeeks.org') && !host.includes('geeksforgeeks.com')) return;
+  gfgAddManualPushButton();
+  // Retry a few times in case editor loads after content script
+  let retries = 0;
+  const retryInterval = setInterval(() => {
+    gfgAddManualPushButton();
+    if (++retries > 5) clearInterval(retryInterval);
+  }, 2000);
+}, 3000);

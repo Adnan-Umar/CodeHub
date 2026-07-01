@@ -104,6 +104,11 @@ function getHackerRankCode() {
 
 async function getHackerRankCodeWithRetry(attempts = 8, delayMs = 400) {
   for (let i = 0; i < attempts; i++) {
+    // Try shared DOM scraper first (works from isolated content-script world)
+    const domCode = window.codehubExtractCodeFromDom?.(document) || null;
+    if (domCode && domCode.trim().length > 2) {
+      return domCode;
+    }
     const code = getHackerRankCode();
     if (code && code.trim().length > 2) {
       return code;
@@ -247,6 +252,34 @@ function getHackerRankLanguage() {
 }
 
 /**
+ * Scrapes runtime / memory stats and the problem title from the HackerRank
+ * results DOM so they can be shared with the commit template (like LeetCode).
+ */
+function getHackerRankSubmissionStats() {
+  const stats = { time: '', space: '', title: '', problemTopic: 'UNKNOWN' };
+
+  try {
+    // HackerRank shows a "Max Score / Time / ..." table on the results page
+    const resultRows = document.querySelectorAll('.resultSet .list-item, table.results-table tr');
+    for (const row of resultRows) {
+      const text = (row.innerText || '').toLowerCase();
+      if (text.includes('time') && !stats.time) {
+        stats.time = (row.innerText || '').split('\n').pop()?.trim() || '';
+      }
+      if (text.includes('memory') && !stats.space) {
+        stats.space = (row.innerText || '').split('\n').pop()?.trim() || '';
+      }
+    }
+  } catch {
+    // selectors are best-effort
+  }
+
+  // Problem title — strip the " | HackerRank" suffix
+  stats.title = document.title?.split('|')[0]?.trim() || '';
+  return stats;
+}
+
+/**
  * Spinner element management for HackerRank UI
  */
 let hrSpinnerElem = null;
@@ -332,7 +365,6 @@ async function handleHackerRankSubmission(detail) {
   if (uploadKey && uploadKey === lastHackerRankUploadKey) {
     return;
   }
-  const platform = detail?.platform || 'HackerRank';
   const statusStr = (
     detail?.status ||
     detail?.result?.status ||
@@ -383,10 +415,13 @@ async function handleHackerRankSubmission(detail) {
 
     const language = detail?.language || getHackerRankLanguage() || 'text';
     const difficulty = detail?.difficulty || '';
+    const { time, space, title } = getHackerRankSubmissionStats();
 
+    // Build a README comparable to LeetCode's (title + difficulty + URL)
+    const problemTitle = title || problemSlug;
     const problemUrl = window.location.href.split('?')[0];
-    const readmeContent = `## [${problemSlug}](${problemUrl})\n\n*Platform: HackerRank*\n`;
-    const commitMsg = `Add ${problemSlug} solution (${platform}) - CodeHub`;
+    const difficultyLine = difficulty ? `\n**Difficulty**: ${difficulty}` : '';
+    const readmeContent = `## [${problemTitle}](${problemUrl})${difficultyLine}\n\n*Platform: HackerRank*\n`;
 
     console.log(`[CodeHub HackerRank] Uploading ${problemSlug}...`);
     await codehubPushSolution({
@@ -395,9 +430,10 @@ async function handleHackerRankSubmission(detail) {
       difficulty,
       code,
       language,
-      commitMsg,
       readmeContent,
       filenameSuffix,
+      time,
+      space,
     });
 
     lastHackerRankUploadKey = uploadKey;
@@ -480,6 +516,7 @@ function hrGetGitIcon() {
 }
 
 function hrAddManualPushButton() {
+  if (!window.location.hostname.includes('hackerrank.com')) return;
   if (document.getElementById('hrManualGitSubmit')) return;
 
   const submitBtn = document.querySelector(
@@ -520,6 +557,7 @@ function hrAddManualPushButton() {
 
 // Inject manual push button after editor is ready
 setTimeout(() => {
+  if (!window.location.hostname.includes('hackerrank.com')) return;
   hrAddManualPushButton();
   // Retry a few times in case editor loads after content script
   let retries = 0;
